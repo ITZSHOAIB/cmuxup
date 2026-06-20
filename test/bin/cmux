@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Mock cmux binary for bats tests.
+# Records every invocation to $BATS_TMPDIR/cmux_calls.
+# Returns realistic output matching the real cmux socket API.
+
+CALLS_FILE="${BATS_TMPDIR:-/tmp}/cmux_calls"
+echo "$*" >> "$CALLS_FILE"
+
+case "$1" in
+  ping)
+    echo "PONG"
+    ;;
+  new-workspace|workspace)
+    echo "OK workspace:1"
+    ;;
+  new-split)
+    # direction is $2; return incrementing surface refs
+    SPLIT_COUNT_FILE="${BATS_TMPDIR:-/tmp}/cmux_split_count"
+    count=$(cat "$SPLIT_COUNT_FILE" 2>/dev/null || echo 1)
+    count=$((count + 1))
+    echo "$count" > "$SPLIT_COUNT_FILE"
+    echo "OK surface:${count} workspace:1"
+    ;;
+  new-surface)
+    echo "OK surface:10 pane:2 workspace:1"
+    ;;
+  tree)
+    echo "window window:1 [current]"
+    echo "└── workspace workspace:1"
+    echo "    ├── pane pane:1 [focused]"
+    echo "    │   └── surface surface:1 [terminal] [selected]"
+    echo "    ├── pane pane:2"
+    echo "    │   ├── surface surface:2 [terminal] [selected]"
+    echo "    │   └── surface surface:10 [terminal]"
+    echo "    └── pane pane:3"
+    echo "        └── surface surface:3 [terminal] [selected]"
+    ;;
+  rename-tab)
+    echo "OK"
+    ;;
+  send)
+    echo "OK surface:1 workspace:1"
+    ;;
+  send-key)
+    echo "OK surface:1 workspace:1"
+    ;;
+  focus-panel)
+    echo "OK"
+    ;;
+  *)
+    echo "OK"
+    ;;
+esac

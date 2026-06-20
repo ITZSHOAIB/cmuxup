@@ -1,0 +1,41 @@
+# Helix editor config — managed by cmux-conjure
+theme = "{{HELIX_THEME}}"
+
+[editor]
+line-number             = "relative"
+cursorline              = true
+color-modes             = true
+bufferline              = "multiple"
+true-color              = true
+rulers                  = [100]
+text-width              = 100
+popup-border            = "all"
+end-of-line-diagnostics = "hint"
+
+[editor.statusline]
+left   = ["mode", "spinner", "version-control", "file-name", "read-only-indicator", "file-modification-indicator"]
+center = []
+right  = ["diagnostics", "selections", "position", "file-encoding", "file-line-ending", "file-type"]
+
+[editor.cursor-shape]
+insert = "bar"
+normal = "block"
+select = "underline"
+
+[editor.file-picker]
+hidden = false
+
+[editor.lsp]
+display-messages     = true
+display-inlay-hints  = true
+
+[editor.indent-guides]
+render    = true
+character = "┊"
+
+[editor.soft-wrap]
+enable = true
+
+[keys.normal]
+"C-s" = ":w"
+"G"   = ["goto_file_end", "align_view_center"]

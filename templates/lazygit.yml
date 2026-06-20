@@ -1,0 +1,19 @@
+# lazygit config — managed by cmux-conjure
+git:
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never
+gui:
+  nerdFontsVersion: "3"
+  showFileTree: true
+  showRandomTip: false
+  showBottomLine: true
+  scrollHeight: 2
+  sidePanelWidth: 0.3333
+  mainPanelSplitMode: flexible
+os:
+  edit: 'hx -- {{filename}}'
+  editAtLine: 'hx -- {{filename}}:{{line}}'
+  editAtLineAndWait: 'hx -- {{filename}}:{{line}}'
+  openDirInEditor: 'hx -- {{dir}}'
+  editInTerminal: true
