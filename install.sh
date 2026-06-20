@@ -13,9 +13,25 @@ set -euo pipefail
 #   CMUXUP_EDITOR             helix | nvim | vim
 #   CMUXUP_OVERWRITE          1 = overwrite existing configs without prompting
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION="0.1.0"
 DRY_RUN=0
+REPO="ITZSHOAIB/cmuxup"
+BRANCH="main"
+
+# When piped via stdin (e.g. curl ... | bash), BASH_SOURCE[0] is unset and
+# template files are unavailable. Download the repo tarball and re-exec.
+_SELF="${BASH_SOURCE[0]:-}"
+if [[ -z "$_SELF" || "$_SELF" == "bash" || "$_SELF" == "-bash" ]]; then
+  _TMP="$(mktemp -d)"
+  trap 'rm -rf "$_TMP"' EXIT
+  echo "Downloading cmuxup..."
+  curl -fsSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" \
+    | tar -xz -C "$_TMP" --strip-components=1
+  # Restore TTY as stdin so gum interactive prompts work after pipe exhaustion.
+  exec bash "$_TMP/install.sh" "$@" </dev/tty
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<EOF
@@ -85,21 +101,22 @@ _apply_template() { # template_file dest theme font_size delta_theme helix_theme
   _write_file "$dest" "$content"
 }
 
-_brew_install() { # formula
-  if command -v "$1" >/dev/null 2>&1; then
-    _skip "$1 already installed"
+_brew_install() { # formula [binary]  (binary defaults to formula name)
+  local formula="$1" binary="${2:-$1}"
+  if command -v "$binary" >/dev/null 2>&1; then
+    _skip "$formula already installed"
     return
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
-    _dry "would brew install $1"
+    _dry "would brew install $formula"
     return
   fi
   if command -v gum >/dev/null 2>&1; then
-    gum spin --spinner dot --title "Installing $1..." -- brew install "$1"
+    gum spin --spinner dot --title "Installing $formula..." -- brew install "$formula"
   else
-    brew install "$1"
+    brew install "$formula"
   fi
-  _ok "installed $1"
+  _ok "installed $formula"
 }
 
 # ── Map theme name to variants used by different tools ────────────────────────
@@ -164,19 +181,36 @@ fi
 
 _theme_variants "$THEME"
 
+# ── Ask once about overwriting existing configs ───────────────────────────────
+if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ] && [ "${CMUXUP_OVERWRITE:-0}" != "1" ]; then
+  _EXISTING_CONFIGS=()
+  for f in "${HOME}/.config/ghostty/config" "${HOME}/.config/helix/config.toml" \
+            "${HOME}/Library/Application Support/lazygit/config.yml" \
+            "${HOME}/.config/yazi/yazi.toml" "${HOME}/.config/starship.toml"; do
+    [ -f "$f" ] && _EXISTING_CONFIGS+=("$f")
+  done
+  if [ "${#_EXISTING_CONFIGS[@]}" -gt 0 ]; then
+    echo ""
+    _log "${#_EXISTING_CONFIGS[@]} config file(s) already exist."
+    if command -v gum >/dev/null 2>&1; then
+      gum confirm "Overwrite existing configs?" && export CMUXUP_OVERWRITE=1 || export CMUXUP_OVERWRITE=0
+    fi
+  fi
+fi
+
 # ── Install tools ─────────────────────────────────────────────────────────────
 
 echo ""
 _log "Installing tools..."
 _brew_install lazygit
-_brew_install git-delta
-_brew_install helix
+_brew_install git-delta delta
+_brew_install helix hx
 _brew_install yazi
 _brew_install starship
 _brew_install zoxide
 _brew_install bat
 _brew_install fd
-_brew_install ripgrep
+_brew_install ripgrep rg
 
 # ── Write configs ─────────────────────────────────────────────────────────────
 
@@ -272,9 +306,28 @@ fi
 
 echo ""
 if command -v gum >/dev/null 2>&1 && [ "$DRY_RUN" -eq 0 ] && [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ]; then
-  gum style --foreground 212 --bold "cmuxup is ready."
-  gum style "Open a new shell and run: cmuxup ~/your-project"
+  gum style \
+    --border double --border-foreground 212 \
+    --padding "1 4" --margin "1 0" \
+    --bold --foreground 212 \
+    "  ✦ cmuxup is ready  ✦"
+  gum style --foreground 245 --margin "0 2" \
+    "Theme:   $THEME" \
+    "Font:    $FONT_SIZE pt  |  Editor: $EDITOR_CHOICE  |  Agent: $AGENT"
+  echo ""
+  gum style --foreground 212 --bold --margin "0 2" "  Next steps:"
+  gum style --foreground 255 --margin "0 2" \
+    "  1. Open a new shell (or run: source ~/.zshrc)" \
+    "  2. Launch your workspace:  cmuxup ~/your-project" \
+    "  3. Reload cmux config:     cmux reload-config"
+  echo ""
+  gum style --foreground 240 --margin "0 2" \
+    "  Docs → https://github.com/ITZSHOAIB/cmuxup"
 else
-  echo "cmuxup is ready."
-  echo "Open a new shell and run: cmuxup ~/your-project"
+  echo "✦ cmuxup is ready ✦"
+  echo ""
+  echo "  Theme: $THEME | Font: ${FONT_SIZE}pt | Editor: $EDITOR_CHOICE | Agent: $AGENT"
+  echo ""
+  echo "  Next: source ~/.zshrc && cmuxup ~/your-project"
+  echo "  Docs: https://github.com/ITZSHOAIB/cmuxup"
 fi
