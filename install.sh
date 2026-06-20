@@ -12,7 +12,6 @@ set -euo pipefail
 #   CMUXUP_AGENT       claude | opencode | codex | none
 #   CMUXUP_LAZYGIT     1 | 0
 #   CMUXUP_EDITOR      helix | nvim | vim | none
-#   CMUXUP_EXTRAS      space-separated: "yazi bat fd ripgrep"
 #   CMUXUP_OVERWRITE   1 = overwrite existing configs without prompting
 
 VERSION="0.1.0"
@@ -59,7 +58,6 @@ Non-interactive env vars (set CMUXUP_NON_INTERACTIVE=1):
   CMUXUP_AGENT       AI agent command               (default: claude)
   CMUXUP_LAZYGIT     Install lazygit  1|0           (default: 1)
   CMUXUP_EDITOR      helix | nvim | vim | none      (default: helix)
-  CMUXUP_EXTRAS      Space-separated extras         (default: "yazi bat fd ripgrep")
   CMUXUP_OVERWRITE   Overwrite existing configs 1|0 (default: 0)
 EOF
 }
@@ -232,125 +230,6 @@ _pick() { # "title" opt1 opt2 ...
   done
 }
 
-# Multi-select arrow-key menu. Prints chosen items to stdout (one per line); display to stderr.
-_pick_multi() { # "title" opt1 opt2 ...
-  local title="$1"; shift
-  local opts=("$@")
-  local n=${#opts[@]}
-  local cur=0
-  local sel=()
-  local i=0
-  while (( i < n )); do
-    sel+=("1")
-    i=$(( i + 1 ))
-  done
-  local lines=$(( n + 5 ))  # blank + title + blank + n items + blank + hint
-
-  _multi_draw() {
-    printf '\033[%dA' "$lines" >&2
-    printf '\n' >&2
-    printf '  \033[1m\033[38;2;203;166;247m✦  %s\033[0m\n' "$title" >&2
-    printf '\n' >&2
-    local j=0
-    while (( j < n )); do
-      local dot item_color
-      if [ "${sel[$j]}" = "1" ]; then
-        dot='\033[38;2;166;227;161m◉\033[0m'
-        item_color='\033[1m\033[38;2;205;214;244m'
-      else
-        dot='\033[38;2;108;112;134m○\033[0m'
-        item_color='\033[38;2;108;112;134m'
-      fi
-      if (( j == cur )); then
-        printf '  \033[1m\033[38;2;203;166;247m❯  \033[0m' >&2
-      else
-        printf '     ' >&2
-      fi
-      printf '%b  %b%s\033[0m\n' "$dot" "$item_color" "${opts[$j]}" >&2
-      j=$(( j + 1 ))
-    done
-    printf '\n' >&2
-    printf '  \033[38;2;108;112;134m↑ ↓  move   space  toggle   ↵  confirm\033[0m\n' >&2
-  }
-
-  # Initial draw (no cursor-up on first paint).
-  printf '\033[?25l' >&2
-  printf '\n' >&2
-  printf '  \033[1m\033[38;2;203;166;247m✦  %s\033[0m\n' "$title" >&2
-  printf '\n' >&2
-  local j=0
-  while (( j < n )); do
-    local dot item_color
-    if [ "${sel[$j]}" = "1" ]; then
-      dot='\033[38;2;166;227;161m◉\033[0m'
-      item_color='\033[1m\033[38;2;205;214;244m'
-    else
-      dot='\033[38;2;108;112;134m○\033[0m'
-      item_color='\033[38;2;108;112;134m'
-    fi
-    if (( j == cur )); then
-      printf '  \033[1m\033[38;2;203;166;247m❯  \033[0m' >&2
-    else
-      printf '     ' >&2
-    fi
-    printf '%b  %b%s\033[0m\n' "$dot" "$item_color" "${opts[$j]}" >&2
-    j=$(( j + 1 ))
-  done
-  printf '\n' >&2
-  printf '  \033[38;2;108;112;134m↑ ↓  move   space  toggle   ↵  confirm\033[0m\n' >&2
-
-  local key
-  while true; do
-    key="$(_read_key)"
-    case "$key" in
-      UP)
-        if (( cur == 0 )); then
-          cur=$(( n - 1 ))
-        else
-          cur=$(( cur - 1 ))
-        fi
-        _multi_draw
-        ;;
-      DOWN)
-        cur=$(( (cur + 1) % n ))
-        _multi_draw
-        ;;
-      SPACE)
-        if [ "${sel[$cur]}" = "1" ]; then
-          sel[$cur]="0"
-        else
-          sel[$cur]="1"
-        fi
-        _multi_draw
-        ;;
-      ENTER)
-        local chosen=()
-        local k=0
-        while (( k < n )); do
-          [ "${sel[$k]}" = "1" ] && chosen+=("${opts[$k]}") || true
-          k=$(( k + 1 ))
-        done
-        printf '\033[%dA\033[J' "$lines" >&2
-        if [ ${#chosen[@]} -eq 0 ]; then
-          printf '  \033[38;2;108;112;134m✦  %s   none\033[0m\n' "$title" >&2
-        else
-          printf '  \033[38;2;108;112;134m✦  %s\033[0m' "$title" >&2
-          local item
-          for item in "${chosen[@]}"; do
-            printf '   \033[1m\033[38;2;205;214;244m%s\033[0m' "$item" >&2
-          done
-          printf '\n' >&2
-        fi
-        printf '\033[?25h' >&2
-        for item in "${chosen[@]}"; do
-          printf '%s\n' "$item"
-        done
-        return
-        ;;
-    esac
-  done
-}
-
 # Simple y/N confirmation. Reads from /dev/tty (works after curl-pipe re-exec).
 _confirm() { # "Question?"
   local answer
@@ -398,7 +277,6 @@ if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
   AGENT="${CMUXUP_AGENT:-claude}"
   INSTALL_LAZYGIT="${CMUXUP_LAZYGIT:-1}"
   EDITOR_CHOICE="${CMUXUP_EDITOR:-helix}"
-  IFS=' ' read -r -a EXTRAS <<< "${CMUXUP_EXTRAS:-yazi bat fd ripgrep}"
 else
   # Ensure cursor is always restored on exit (Ctrl-C, errors, etc.)
   trap 'printf "\033[?25h" >&2' EXIT
@@ -420,11 +298,6 @@ else
 
   EDITOR_CHOICE="$(_pick "Editor  (right-top pane)" "helix" "nvim" "vim" "none")"
 
-  EXTRAS=()
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && EXTRAS+=("$line")
-  done < <(_pick_multi "Optional tools" "yazi" "bat" "fd" "ripgrep")
-
   printf "\n"
   _confirm "Ready to install?" || { printf "  Aborted.\n"; exit 0; }
 fi
@@ -436,8 +309,7 @@ _theme_variants "$THEME"
 if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ] && [ "${CMUXUP_OVERWRITE:-0}" != "1" ]; then
   _EXISTING=()
   for f in "${HOME}/.config/ghostty/config" "${HOME}/.config/helix/config.toml" \
-            "${HOME}/Library/Application Support/lazygit/config.yml" \
-            "${HOME}/.config/yazi/yazi.toml"; do
+            "${HOME}/Library/Application Support/lazygit/config.yml"; do
     [ -f "$f" ] && _EXISTING+=("$f")
   done
   if [ "${#_EXISTING[@]}" -gt 0 ]; then
@@ -452,7 +324,14 @@ fi
 printf "\n"
 _log "Installing tools..."
 
+# Core tools — the foundation every cmuxup workspace relies on:
+#   delta   — syntax-highlighted git diffs (terminal + lazygit)
+#   ripgrep — fast search, powers the editor's project-wide search
+#   fd      — fast file finding, powers the editor's file picker
+#   zoxide  — smart directory jumping
 _brew_install git-delta delta
+_brew_install ripgrep rg
+_brew_install fd
 _brew_install zoxide
 
 [ "${INSTALL_LAZYGIT}" = "1" ] && _brew_install lazygit || true
@@ -462,15 +341,6 @@ case "$EDITOR_CHOICE" in
   nvim)  _brew_install neovim nvim ;;
   vim)   command -v vim >/dev/null 2>&1 || _brew_install vim ;;
 esac
-
-for tool in "${EXTRAS[@]:-}"; do
-  case "$tool" in
-    yazi)    _brew_install yazi ;;
-    bat)     _brew_install bat ;;
-    fd)      _brew_install fd ;;
-    ripgrep) _brew_install ripgrep rg ;;
-  esac
-done
 
 # ── Write configs ─────────────────────────────────────────────────────────────
 
@@ -489,10 +359,6 @@ _apply_template "$TEMPLATES/ghostty.config" \
 
 [ "${INSTALL_LAZYGIT}" = "1" ] && _apply_template "$TEMPLATES/lazygit.yml" \
   "${HOME}/Library/Application Support/lazygit/config.yml" \
-  "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME" || true
-
-echo "${EXTRAS[*]:-}" | grep -qw "yazi" && _apply_template "$TEMPLATES/yazi.toml" \
-  "${HOME}/.config/yazi/yazi.toml" \
   "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME" || true
 
 if [ "$DRY_RUN" -eq 0 ]; then
@@ -555,19 +421,7 @@ case "$EDITOR_CHOICE" in
 esac
 _SB+=('eval "$(zoxide init zsh)"')
 
-echo "${EXTRAS[*]:-}" | grep -qw "yazi" && {
-  _SB+=('function y() {')
-  _SB+=('  local tmp cwd')
-  _SB+=('  tmp="$(mktemp -t yazi-cwd.XXXXXX)"')
-  _SB+=('  yazi "$@" --cwd-file="$tmp"')
-  _SB+=('  if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then')
-  _SB+=('    builtin cd -- "$cwd"')
-  _SB+=('  fi')
-  _SB+=('  rm -f -- "$tmp"')
-  _SB+=("}")
-} || true
-
-_SB+=('alias lg="lazygit"')
+[ "${INSTALL_LAZYGIT}" = "1" ] && _SB+=('alias lg="lazygit"') || true
 [ -n "$_EDITOR_BIN" ] && _SB+=("alias e=\"$_EDITOR_BIN\"") || true
 _SB+=("# ── end cmuxup ─────────────────────────────────────────────────────────")
 

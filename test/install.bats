@@ -10,7 +10,6 @@ setup() {
   export CMUXUP_AGENT="claude"
   export CMUXUP_LAZYGIT="1"
   export CMUXUP_EDITOR="helix"
-  export CMUXUP_EXTRAS=""
   export CMUXUP_OVERWRITE="0"
   # Isolated HOME so we never touch the real ~/.gitconfig etc.
   export HOME="$(mktemp -d)"
@@ -96,11 +95,27 @@ teardown() {
   grep -q "cmuxup shell integration" "$HOME/.zshrc"
 }
 
-# ── 9. shell block not duplicated on re-run ────────────────────────────────────
+# ── 10. shell block not duplicated on re-run ──────────────────────────────────
 @test "install.sh does not duplicate shell integration block on re-run" {
   touch "$HOME/.zshrc"
   bash "$INSTALL"
   bash "$INSTALL"
   COUNT="$(grep -c "cmuxup shell integration" "$HOME/.zshrc" || true)"
   [ "$COUNT" -eq 1 ]
+}
+
+# ── 11. ripgrep and fd are core (always referenced, no opt-in) ────────────────
+@test "install.sh treats ripgrep and fd as core tools" {
+  run bash "$INSTALL" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ripgrep"* ]]
+  [[ "$output" == *"fd"* ]]
+}
+
+# ── 12. yazi is fully removed (regression guard) ──────────────────────────────
+@test "install.sh no longer references yazi anywhere" {
+  run bash "$INSTALL" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"yazi"* ]]
+  [ ! -f "$BATS_TEST_DIRNAME/../templates/yazi.toml" ]
 }
