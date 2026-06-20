@@ -186,7 +186,7 @@ if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ] && [ "${CMU
   _EXISTING_CONFIGS=()
   for f in "${HOME}/.config/ghostty/config" "${HOME}/.config/helix/config.toml" \
             "${HOME}/Library/Application Support/lazygit/config.yml" \
-            "${HOME}/.config/yazi/yazi.toml" "${HOME}/.config/starship.toml"; do
+            "${HOME}/.config/yazi/yazi.toml"; do
     [ -f "$f" ] && _EXISTING_CONFIGS+=("$f")
   done
   if [ "${#_EXISTING_CONFIGS[@]}" -gt 0 ]; then
@@ -206,7 +206,6 @@ _brew_install lazygit
 _brew_install git-delta delta
 _brew_install helix hx
 _brew_install yazi
-_brew_install starship
 _brew_install zoxide
 _brew_install bat
 _brew_install fd
@@ -223,7 +222,6 @@ _apply_template "$TEMPLATES/ghostty.config"      "${HOME}/.config/ghostty/config
 _apply_template "$TEMPLATES/helix.toml"          "${HOME}/.config/helix/config.toml"   "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 _apply_template "$TEMPLATES/lazygit.yml"         "${HOME}/Library/Application Support/lazygit/config.yml" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 _apply_template "$TEMPLATES/yazi.toml"           "${HOME}/.config/yazi/yazi.toml"      "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/starship.toml"       "${HOME}/.config/starship.toml"       "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 _apply_template "$TEMPLATES/gitconfig-delta.ini" "${TMPDIR:-/tmp}/cmuxup-gitdelta.ini" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 
 # Merge delta git config (non-destructive: only sets keys not already present).
@@ -279,7 +277,6 @@ SHELL_BLOCK='
 export EDITOR="hx"
 export VISUAL="hx"
 eval "$(zoxide init zsh)"
-eval "$(starship init zsh)"
 function y() {
   local tmp cwd
   tmp="$(mktemp -t yazi-cwd.XXXXXX)"
