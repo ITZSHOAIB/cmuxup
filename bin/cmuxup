@@ -3,7 +3,7 @@ set -euo pipefail
 
 VERSION="0.1.0"
 
-# conjure [/path/to/project]
+# cmuxup [/path/to/project]
 #
 # Builds a terminal-first agentic IDE layout in cmux via its control socket.
 # No AppleScript, no keystroke timing — pure cmux socket API.
@@ -16,14 +16,14 @@ VERSION="0.1.0"
 #   └──────────────┴───────────────────────┘
 #
 # Env overrides:
-#   CONJURE_MAIN_CMD  default: claude
-#   CONJURE_LG_CMD    default: lazygit
-#   CONJURE_HX_CMD    default: hx .
-#   CONJURE_DEV_CMD   default: (empty — just cd's into project)
+#   CMUXUP_MAIN_CMD  default: claude
+#   CMUXUP_LG_CMD    default: lazygit
+#   CMUXUP_HX_CMD    default: hx .
+#   CMUXUP_DEV_CMD   default: (empty — just cd's into project)
 
 usage() {
   cat <<EOF
-Usage: conjure [options] [/path/to/project]
+Usage: cmuxup [options] [/path/to/project]
 
 Conjure a terminal-first agentic workspace in cmux.
 
@@ -35,15 +35,15 @@ Options:
   --version, -v      Print version
 
 Layout:
-  Left pane      — main agent (CONJURE_MAIN_CMD, default: claude)
+  Left pane      — main agent (CMUXUP_MAIN_CMD, default: claude)
   Right-top pane — two tabs: lazygit + helix editor
   Right-bottom   — dev terminal
 
 Env overrides:
-  CONJURE_MAIN_CMD   Command for the left pane    (default: claude)
-  CONJURE_LG_CMD     Command for lazygit tab      (default: lazygit)
-  CONJURE_HX_CMD     Command for helix tab        (default: hx .)
-  CONJURE_DEV_CMD    Command for dev terminal     (default: empty)
+  CMUXUP_MAIN_CMD   Command for the left pane    (default: claude)
+  CMUXUP_LG_CMD     Command for lazygit tab      (default: lazygit)
+  CMUXUP_HX_CMD     Command for helix tab        (default: hx .)
+  CMUXUP_DEV_CMD    Command for dev terminal     (default: empty)
 EOF
 }
 
@@ -56,15 +56,15 @@ export CMUX_QUIET=1
 
 PROJECT_DIR="${1:-$PWD}"
 if ! PROJECT_DIR="$(cd "$PROJECT_DIR" 2>/dev/null && pwd)"; then
-  echo "conjure: '${1:-$PWD}' is not a directory" >&2
+  echo "cmuxup: '${1:-$PWD}' is not a directory" >&2
   exit 1
 fi
 NAME="$(basename "$PROJECT_DIR")"
 
-MAIN_CMD="${CONJURE_MAIN_CMD:-claude}"
-LG_CMD="${CONJURE_LG_CMD:-lazygit}"
-HX_CMD="${CONJURE_HX_CMD:-hx .}"
-DEV_CMD="${CONJURE_DEV_CMD:-}"
+MAIN_CMD="${CMUXUP_MAIN_CMD:-claude}"
+LG_CMD="${CMUXUP_LG_CMD:-lazygit}"
+HX_CMD="${CMUXUP_HX_CMD:-hx .}"
+DEV_CMD="${CMUXUP_DEV_CMD:-}"
 
 CMUX_BIN="$(command -v cmux 2>/dev/null || echo /Applications/cmux.app/Contents/Resources/bin/cmux)"
 cx() { "$CMUX_BIN" "$@"; }
@@ -76,7 +76,7 @@ if ! cx ping >/dev/null 2>&1; then
     cx ping >/dev/null 2>&1 && break
     sleep 0.5
   done
-  cx ping >/dev/null 2>&1 || { echo "conjure: cmux control socket not responding" >&2; exit 1; }
+  cx ping >/dev/null 2>&1 || { echo "cmuxup: cmux control socket not responding" >&2; exit 1; }
 fi
 
 # Parse the first "type:N" ref from stdin.
@@ -98,7 +98,7 @@ _run_in() { # surface workspace command
 
 # 1. Create workspace; main pane launches the agent command.
 WS="$(cx new-workspace --name "$NAME" --cwd "$PROJECT_DIR" --command "$MAIN_CMD" --focus true | _ref workspace)"
-[ -n "$WS" ] || { echo "conjure: failed to create cmux workspace" >&2; exit 1; }
+[ -n "$WS" ] || { echo "cmuxup: failed to create cmux workspace" >&2; exit 1; }
 
 # 2. Identify the initial surface (the only one that exists right after creation).
 MAIN_SURFACE="$(cx tree --workspace "$WS" | _ref surface)"
@@ -129,7 +129,7 @@ fi
 # 8. Return focus to the agent pane on the left.
 cx focus-panel --panel "$MAIN_SURFACE" --workspace "$WS" >/dev/null 2>&1 || true
 
-echo "conjure: workspace '$NAME' ready ($WS)"
+echo "cmuxup: workspace '$NAME' ready ($WS)"
 echo "  left          $MAIN_CMD"
 echo "  right-top     lazygit | helix (tabs)"
 echo "  right-bottom  dev terminal"

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# conjure-cmux installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/ITZSHOAIB/cmux-conjure/main/install.sh | bash
+# cmuxup installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/ITZSHOAIB/cmuxup/main/install.sh | bash
 # Or:    bash install.sh [--help] [--dry-run]
 #
 # Non-interactive mode (for CI / testing):
-#   CONJURE_NON_INTERACTIVE=1  skip all gum prompts, use env vars below
-#   CONJURE_THEME              one of: "Catppuccin Mocha" | "TokyoNight Storm" | "Gruvbox Dark Hard" | "Kanagawa Wave"
-#   CONJURE_FONT_SIZE          13 | 14 | 15
-#   CONJURE_AGENT              claude | opencode | codex | none
-#   CONJURE_EDITOR             helix | nvim | vim
-#   CONJURE_OVERWRITE          1 = overwrite existing configs without prompting
+#   CMUXUP_NON_INTERACTIVE=1  skip all gum prompts, use env vars below
+#   CMUXUP_THEME              one of: "Catppuccin Mocha" | "TokyoNight Storm" | "Gruvbox Dark Hard" | "Kanagawa Wave"
+#   CMUXUP_FONT_SIZE          13 | 14 | 15
+#   CMUXUP_AGENT              claude | opencode | codex | none
+#   CMUXUP_EDITOR             helix | nvim | vim
+#   CMUXUP_OVERWRITE          1 = overwrite existing configs without prompting
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION="0.1.0"
@@ -21,18 +21,18 @@ usage() {
   cat <<EOF
 Usage: bash install.sh [options]
 
-Install cmux-conjure: a terminal-first agentic workspace setup for cmux.
+Install cmuxup: a terminal-first agentic workspace setup for cmux.
 
 Options:
   --help, -h    Show this help message
   --dry-run     Show what would be installed without making changes
 
-Non-interactive env vars (set CONJURE_NON_INTERACTIVE=1):
-  CONJURE_THEME       Theme name           (default: Catppuccin Mocha)
-  CONJURE_FONT_SIZE   Font size            (default: 14)
-  CONJURE_AGENT       AI agent command     (default: claude)
-  CONJURE_EDITOR      Editor for hx tab    (default: helix)
-  CONJURE_OVERWRITE   Overwrite existing configs (default: 0)
+Non-interactive env vars (set CMUXUP_NON_INTERACTIVE=1):
+  CMUXUP_THEME       Theme name           (default: Catppuccin Mocha)
+  CMUXUP_FONT_SIZE   Font size            (default: 14)
+  CMUXUP_AGENT       AI agent command     (default: claude)
+  CMUXUP_EDITOR      Editor for hx tab    (default: helix)
+  CMUXUP_OVERWRITE   Overwrite existing configs (default: 0)
 EOF
 }
 
@@ -57,15 +57,15 @@ _write_file() { # dest content
     return
   fi
   mkdir -p "$(dirname "$dest")"
-  if [ -f "$dest" ] && [ "${CONJURE_OVERWRITE:-0}" != "1" ]; then
-    if [ "${CONJURE_NON_INTERACTIVE:-0}" = "1" ]; then
+  if [ -f "$dest" ] && [ "${CMUXUP_OVERWRITE:-0}" != "1" ]; then
+    if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ]; then
       _skip "$dest already exists"
       return
     fi
     if command -v gum >/dev/null 2>&1; then
       gum confirm "Overwrite $dest?" || { _skip "$dest already exists"; return; }
     else
-      _skip "$dest already exists (use CONJURE_OVERWRITE=1 to overwrite)"
+      _skip "$dest already exists (use CMUXUP_OVERWRITE=1 to overwrite)"
       return
     fi
   fi
@@ -121,7 +121,7 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 # Bootstrap gum for the interactive UI (skip in dry-run or non-interactive).
-if [ "${CONJURE_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
+if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
   if ! command -v gum >/dev/null 2>&1; then
     echo "Installing gum for the interactive UI..."
     brew install gum >/dev/null 2>&1
@@ -130,17 +130,17 @@ fi
 
 # ── Gather choices ────────────────────────────────────────────────────────────
 
-if [ "${CONJURE_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
-  THEME="${CONJURE_THEME:-Catppuccin Mocha}"
-  FONT_SIZE="${CONJURE_FONT_SIZE:-14}"
-  AGENT="${CONJURE_AGENT:-claude}"
-  EDITOR_CHOICE="${CONJURE_EDITOR:-helix}"
+if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
+  THEME="${CMUXUP_THEME:-Catppuccin Mocha}"
+  FONT_SIZE="${CMUXUP_FONT_SIZE:-14}"
+  AGENT="${CMUXUP_AGENT:-claude}"
+  EDITOR_CHOICE="${CMUXUP_EDITOR:-helix}"
 else
   if command -v gum >/dev/null 2>&1; then
     gum style \
       --border double --border-foreground 212 \
       --padding "1 4" --margin "1 0" \
-      --bold "cmux-conjure v${VERSION}" \
+      --bold "cmuxup v${VERSION}" \
       "Terminal-first agentic workspace for cmux"
 
     THEME="$(gum choose --header "Choose your theme:" \
@@ -190,7 +190,7 @@ _apply_template "$TEMPLATES/helix.toml"          "${HOME}/.config/helix/config.t
 _apply_template "$TEMPLATES/lazygit.yml"         "${HOME}/Library/Application Support/lazygit/config.yml" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 _apply_template "$TEMPLATES/yazi.toml"           "${HOME}/.config/yazi/yazi.toml"      "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 _apply_template "$TEMPLATES/starship.toml"       "${HOME}/.config/starship.toml"       "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/gitconfig-delta.ini" "${TMPDIR:-/tmp}/conjure-gitdelta.ini" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+_apply_template "$TEMPLATES/gitconfig-delta.ini" "${TMPDIR:-/tmp}/cmuxup-gitdelta.ini" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 
 # Merge delta git config (non-destructive: only sets keys not already present).
 if [ "$DRY_RUN" -eq 0 ]; then
@@ -201,7 +201,7 @@ if [ "$DRY_RUN" -eq 0 ]; then
     section=""
     # We'll use git config --global directly.
     true
-  done < "${TMPDIR:-/tmp}/conjure-gitdelta.ini"
+  done < "${TMPDIR:-/tmp}/cmuxup-gitdelta.ini"
   git config --global core.pager "delta"
   git config --global interactive.diffFilter "delta --color-only"
   git config --global delta.navigate true
@@ -218,30 +218,30 @@ fi
 # Write cmux.json settings if not already customized.
 CMUX_JSON="${HOME}/.config/cmux/cmux.json"
 if [ -f "$CMUX_JSON" ] && grep -q '"diffViewer"' "$CMUX_JSON" 2>/dev/null; then
-  _skip "cmux.json already has conjure settings"
+  _skip "cmux.json already has cmuxup settings"
 else
   _apply_template "$TEMPLATES/cmux-settings.jsonc" "$CMUX_JSON" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 fi
 
-# ── Install conjure command ────────────────────────────────────────────────────
+# ── Install cmuxup command ────────────────────────────────────────────────────
 
 echo ""
-_log "Installing conjure command..."
+_log "Installing cmuxup command..."
 INSTALL_DIR="${HOME}/.local/bin"
 if [ "$DRY_RUN" -eq 1 ]; then
-  _dry "would install conjure to $INSTALL_DIR/conjure"
+  _dry "would install cmuxup to $INSTALL_DIR/cmuxup"
 else
   mkdir -p "$INSTALL_DIR"
-  cp "$SCRIPT_DIR/bin/conjure" "$INSTALL_DIR/conjure"
-  chmod +x "$INSTALL_DIR/conjure"
-  _ok "installed conjure to $INSTALL_DIR/conjure"
+  cp "$SCRIPT_DIR/bin/cmuxup" "$INSTALL_DIR/cmuxup"
+  chmod +x "$INSTALL_DIR/cmuxup"
+  _ok "installed cmuxup to $INSTALL_DIR/cmuxup"
 fi
 
 # ── Shell integration ─────────────────────────────────────────────────────────
 
 ZSHRC="${HOME}/.zshrc"
 SHELL_BLOCK='
-# ── cmux-conjure shell integration ──────────────────────────────────────────
+# ── cmuxup shell integration ──────────────────────────────────────────
 export EDITOR="hx"
 export VISUAL="hx"
 eval "$(zoxide init zsh)"
@@ -257,11 +257,11 @@ function y() {
 }
 alias lg="lazygit"
 alias e="hx"
-# ── end cmux-conjure ─────────────────────────────────────────────────────────'
+# ── end cmuxup ─────────────────────────────────────────────────────────'
 
 if [ "$DRY_RUN" -eq 1 ]; then
   _dry "would append shell integration to $ZSHRC"
-elif grep -q "cmux-conjure shell integration" "$ZSHRC" 2>/dev/null; then
+elif grep -q "cmuxup shell integration" "$ZSHRC" 2>/dev/null; then
   _skip "shell integration already in $ZSHRC"
 else
   echo "$SHELL_BLOCK" >> "$ZSHRC"
@@ -271,10 +271,10 @@ fi
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
-if command -v gum >/dev/null 2>&1 && [ "$DRY_RUN" -eq 0 ] && [ "${CONJURE_NON_INTERACTIVE:-0}" != "1" ]; then
-  gum style --foreground 212 --bold "conjure is ready."
-  gum style "Open a new shell and run: conjure ~/your-project"
+if command -v gum >/dev/null 2>&1 && [ "$DRY_RUN" -eq 0 ] && [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ]; then
+  gum style --foreground 212 --bold "cmuxup is ready."
+  gum style "Open a new shell and run: cmuxup ~/your-project"
 else
-  echo "conjure is ready."
-  echo "Open a new shell and run: conjure ~/your-project"
+  echo "cmuxup is ready."
+  echo "Open a new shell and run: cmuxup ~/your-project"
 fi

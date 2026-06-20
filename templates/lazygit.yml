@@ -1,4 +1,4 @@
-# lazygit config — managed by cmux-conjure
+# lazygit config — managed by cmuxup
 git:
   paging:
     colorArg: always
