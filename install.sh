@@ -107,17 +107,33 @@ _apply_template() { # template_file dest theme font_size delta_theme helix_theme
   _write_file "$2" "$content"
 }
 
+_spin() { # "label" pid
+  local label="$1" pid="$2"
+  local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  local i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    printf "\r  ${_C_SUBTEXT}%s %s...${_C_RESET}" "${frames[$((i % 10))]}" "$label"
+    i=$((i + 1))
+    sleep 0.08
+  done
+  printf "\r\033[K"
+}
+
 _brew_install() { # formula [binary]
   local formula="$1" binary="${2:-$1}"
   if command -v "$binary" >/dev/null 2>&1; then
     _skip "$formula already installed"; return
   fi
   if [ "$DRY_RUN" -eq 1 ]; then _dry "would brew install $formula"; return; fi
-  printf "  ${_C_SUBTEXT}○ installing %s...${_C_RESET}" "$formula"
-  if brew install "$formula" >/dev/null 2>&1; then
-    printf "\r\033[K"; _ok "installed $formula"
+  brew install "$formula" >/dev/null 2>&1 &
+  local brew_pid=$!
+  _spin "installing $formula" "$brew_pid"
+  local exit_code=0
+  wait "$brew_pid" || exit_code=$?
+  if [ "$exit_code" -eq 0 ]; then
+    _ok "installed $formula"
   else
-    printf "\r\033[K"; _err "failed to install $formula"; return 1
+    _err "failed to install $formula"; return 1
   fi
 }
 
