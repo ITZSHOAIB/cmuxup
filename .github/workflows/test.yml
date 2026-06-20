@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install test dependencies
-        run: brew install bats-core gum
+        run: brew install bats-core
 
       - name: Run tests
         run: bats test/
