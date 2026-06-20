@@ -87,8 +87,10 @@ _write_file() { # dest content
   local dest="$1" content="$2"
   if [ "$DRY_RUN" -eq 1 ]; then _dry "would write $dest"; return; fi
   mkdir -p "$(dirname "$dest")"
-  if [ -f "$dest" ] && [ "${CMUXUP_OVERWRITE:-0}" != "1" ]; then
-    _skip "$dest already exists"; return
+  if [ -f "$dest" ]; then
+    [ "${CMUXUP_OVERWRITE:-0}" != "1" ] && { _skip "$dest already exists"; return; }
+    cp "$dest" "${dest}.bak"
+    _log "backed up ${dest} → ${dest}.bak"
   fi
   printf '%s\n' "$content" > "$dest"
   _ok "wrote $dest"
