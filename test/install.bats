@@ -77,7 +77,18 @@ teardown() {
   [ ! -f "$HOME/.config/helix/config.toml" ]
 }
 
-# ── 8. shell block written to .zshrc on first install ─────────────────────────
+# ── 8. existing config is backed up before overwrite ─────────────────────────
+@test "install.sh backs up existing config to .bak when CMUXUP_OVERWRITE=1" {
+  mkdir -p "$HOME/.config/ghostty"
+  echo "original-content" > "$HOME/.config/ghostty/config"
+  export CMUXUP_OVERWRITE="1"
+  run bash "$INSTALL"
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.config/ghostty/config.bak" ]
+  [[ "$(cat "$HOME/.config/ghostty/config.bak")" == "original-content" ]]
+}
+
+# ── 9. shell block written to .zshrc on first install ─────────────────────────
 @test "install.sh appends shell integration block to .zshrc" {
   touch "$HOME/.zshrc"
   run bash "$INSTALL"
