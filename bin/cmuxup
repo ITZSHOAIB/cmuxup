@@ -8,24 +8,33 @@ VERSION="0.1.0"
 # Builds a terminal-first agentic IDE layout in cmux via its control socket.
 # No AppleScript, no keystroke timing — pure cmux socket API.
 #
-# Layout:
+# Layout adapts to which tools are configured:
+#
+#   Both lazygit + editor:
 #   ┌──────────────┬───────────────────────┐
-#   │              │  [lazygit] [helix]    │  right-top pane — two tabs
-#   │   claude     ├───────────────────────┤
+#   │              │  [lazygit] [editor]   │  right-top pane — two tabs
+#   │   agent      ├───────────────────────┤
+#   │              │  dev terminal         │  right-bottom pane
+#   └──────────────┴───────────────────────┘
+#
+#   One of lazygit / editor (or neither):
+#   ┌──────────────┬───────────────────────┐
+#   │              │  lazygit / editor     │  right-top pane — single tab
+#   │   agent      ├───────────────────────┤
 #   │              │  dev terminal         │  right-bottom pane
 #   └──────────────┴───────────────────────┘
 #
 # Env overrides:
 #   CMUXUP_MAIN_CMD  default: claude
-#   CMUXUP_LG_CMD    default: lazygit
-#   CMUXUP_HX_CMD    default: hx .
+#   CMUXUP_LG_CMD    default: lazygit  (set to "" to disable)
+#   CMUXUP_HX_CMD    default: hx .     (set to "" to disable)
 #   CMUXUP_DEV_CMD   default: (empty — just cd's into project)
 
 usage() {
   cat <<EOF
 Usage: cmuxup [options] [/path/to/project]
 
-Conjure a terminal-first agentic workspace in cmux.
+Open a terminal-first agentic workspace in cmux.
 
 Arguments:
   /path/to/project   Directory to open (default: current directory)
@@ -36,14 +45,14 @@ Options:
 
 Layout:
   Left pane      — main agent (CMUXUP_MAIN_CMD, default: claude)
-  Right-top pane — two tabs: lazygit + helix editor
+  Right-top pane — lazygit tab + editor tab (both optional)
   Right-bottom   — dev terminal
 
 Env overrides:
-  CMUXUP_MAIN_CMD   Command for the left pane    (default: claude)
-  CMUXUP_LG_CMD     Command for lazygit tab      (default: lazygit)
-  CMUXUP_HX_CMD     Command for helix tab        (default: hx .)
-  CMUXUP_DEV_CMD    Command for dev terminal     (default: empty)
+  CMUXUP_MAIN_CMD   Command for the agent pane    (default: claude)
+  CMUXUP_LG_CMD     Command for lazygit tab       (default: lazygit, "" = skip)
+  CMUXUP_HX_CMD     Command for editor tab        (default: hx .,   "" = skip)
+  CMUXUP_DEV_CMD    Command for dev terminal      (default: empty)
 EOF
 }
 
@@ -85,8 +94,8 @@ _ref() { grep -oE "$1:[0-9]+" | head -1; }
 # Find the pane that contains a given surface by parsing cmux tree output.
 _pane_of_surface() { # workspace surface
   cx tree --workspace "$1" | awk -v s="$2" '
-    { for (i=1;i<=NF;i++) { if ($i ~ /^pane:[0-9]+$/) p=$i; if ($i==s) { print p; found=1 } } }
-    found { exit }'
+    { for (i=1;i<=NF;i++) { if ($i ~ /^pane:[0-9]+$/) p=$i; if ($i==s) { found=1 } } }
+    found { print p; exit }'
 }
 
 # Send a command to a surface and execute it.
@@ -96,40 +105,64 @@ _run_in() { # surface workspace command
   cx send-key --surface "$1" --workspace "$2" Enter >/dev/null
 }
 
-# 1. Create workspace; main pane launches the agent command.
+# 1. Create workspace; main pane launches the agent.
 WS="$(cx new-workspace --name "$NAME" --cwd "$PROJECT_DIR" --command "$MAIN_CMD" --focus true | _ref workspace)"
 [ -n "$WS" ] || { echo "cmuxup: failed to create cmux workspace" >&2; exit 1; }
 
-# 2. Identify the initial surface (the only one that exists right after creation).
+# 2. Identify the initial surface.
 MAIN_SURFACE="$(cx tree --workspace "$WS" | _ref surface)"
 
-# 3. Split right → right-top pane (lazygit tab lives here).
-LG_SURFACE="$(cx new-split right --surface "$MAIN_SURFACE" --workspace "$WS" --focus false | _ref surface)"
-RT_PANE="$(_pane_of_surface "$WS" "$LG_SURFACE")"
+# 3. Split right → right-top pane.
+RT_SURFACE="$(cx new-split right --surface "$MAIN_SURFACE" --workspace "$WS" --focus false | _ref surface)"
+RT_PANE="$(_pane_of_surface "$WS" "$RT_SURFACE")"
 
-# 4. Split down from the right-top surface → right-bottom dev terminal.
-DEV_SURFACE="$(cx new-split down --surface "$LG_SURFACE" --workspace "$WS" --focus false | _ref surface)"
+# 4. Split down from right-top → right-bottom dev terminal.
+DEV_SURFACE="$(cx new-split down --surface "$RT_SURFACE" --workspace "$WS" --focus false | _ref surface)"
 
-# 5. Add a second tab to the right-top pane → helix.
-HX_SURFACE="$(cx new-surface --type terminal --pane "$RT_PANE" --workspace "$WS" --focus false | _ref surface)"
+# 5. Decide which tools go into the right-top pane.
+#    If both LG_CMD and HX_CMD are set → two tabs (lazygit first, editor second).
+#    If only one → that tool runs in the single right-top tab.
+#    If neither → plain terminal (dev work only).
 
-# 6. Name the two tabs.
-cx rename-tab --surface "$LG_SURFACE" --workspace "$WS" "lazygit" >/dev/null 2>&1 || true
-cx rename-tab --surface "$HX_SURFACE" --workspace "$WS" "helix"   >/dev/null 2>&1 || true
+RT_LABEL="terminal"
+SECOND_SURFACE=""
+SECOND_LABEL=""
 
-# 7. Launch tools in each pane.
-_run_in "$LG_SURFACE"  "$WS" "cd \"$PROJECT_DIR\" && $LG_CMD"
-_run_in "$HX_SURFACE"  "$WS" "cd \"$PROJECT_DIR\" && $HX_CMD"
+if [ -n "$LG_CMD" ] && [ -n "$HX_CMD" ]; then
+  # Two tabs: lazygit + editor.
+  SECOND_SURFACE="$(cx new-surface --type terminal --pane "$RT_PANE" --workspace "$WS" --focus false | _ref surface)"
+  _run_in "$RT_SURFACE"     "$WS" "cd \"$PROJECT_DIR\" && $LG_CMD"
+  _run_in "$SECOND_SURFACE" "$WS" "cd \"$PROJECT_DIR\" && $HX_CMD"
+  RT_LABEL="lazygit"
+  SECOND_LABEL="editor"
+  cx rename-tab --surface "$RT_SURFACE"     --workspace "$WS" "lazygit" >/dev/null 2>&1 || true
+  cx rename-tab --surface "$SECOND_SURFACE" --workspace "$WS" "editor"  >/dev/null 2>&1 || true
+elif [ -n "$LG_CMD" ]; then
+  _run_in "$RT_SURFACE" "$WS" "cd \"$PROJECT_DIR\" && $LG_CMD"
+  RT_LABEL="lazygit"
+  cx rename-tab --surface "$RT_SURFACE" --workspace "$WS" "lazygit" >/dev/null 2>&1 || true
+elif [ -n "$HX_CMD" ]; then
+  _run_in "$RT_SURFACE" "$WS" "cd \"$PROJECT_DIR\" && $HX_CMD"
+  RT_LABEL="editor"
+  cx rename-tab --surface "$RT_SURFACE" --workspace "$WS" "editor"  >/dev/null 2>&1 || true
+fi
+
+# 6. Launch dev terminal.
 if [ -n "$DEV_CMD" ]; then
   _run_in "$DEV_SURFACE" "$WS" "cd \"$PROJECT_DIR\" && $DEV_CMD"
 else
   _run_in "$DEV_SURFACE" "$WS" "cd \"$PROJECT_DIR\""
 fi
 
-# 8. Return focus to the agent pane on the left.
+# 7. Return focus to the agent pane.
 cx focus-panel --panel "$MAIN_SURFACE" --workspace "$WS" >/dev/null 2>&1 || true
 
+# 8. Report layout.
 echo "cmuxup: workspace '$NAME' ready ($WS)"
-echo "  left          $MAIN_CMD"
-echo "  right-top     lazygit | helix (tabs)"
-echo "  right-bottom  dev terminal"
+printf "  %-14s  %s\n" "left" "$MAIN_CMD"
+if [ -n "$SECOND_LABEL" ]; then
+  printf "  %-14s  %s | %s (tabs)\n" "right-top" "$RT_LABEL" "$SECOND_LABEL"
+else
+  printf "  %-14s  %s\n" "right-top" "$RT_LABEL"
+fi
+printf "  %-14s  dev terminal\n" "right-bottom"
