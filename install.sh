@@ -42,10 +42,6 @@ _C_MAUVE='\033[38;2;203;166;247m'   # #cba6f7
 _C_GREEN='\033[38;2;166;227;161m'   # #a6e3a1
 _C_BLUE='\033[38;2;137;180;250m'    # #89b4fa
 _C_SUBTEXT='\033[38;2;147;153;178m' # #9399b2
-_C_BORDER='\033[38;2;69;71;90m'     # #45475a
-
-# fzf colour scheme (reused by all _pick / _pick_multi calls).
-_FZF_COLORS="fg:#cdd6f4,bg:#1e1e2e,hl:#f38ba8,fg+:#cdd6f4,bg+:#313244,hl+:#f38ba8,border:#45475a,info:#6c7086,prompt:#cba6f7,pointer:#f5c2e7,marker:#a6e3a1,header:#89b4fa"
 
 usage() {
   cat <<EOF
@@ -107,17 +103,33 @@ _apply_template() { # template_file dest theme font_size delta_theme helix_theme
   _write_file "$2" "$content"
 }
 
+_spin() { # "label" pid
+  local label="$1" pid="$2"
+  local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  local i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    printf "\r  ${_C_SUBTEXT}%s %s...${_C_RESET}" "${frames[$((i % 10))]}" "$label"
+    i=$(( i + 1 ))
+    sleep 0.08
+  done
+  printf "\r\033[K"
+}
+
 _brew_install() { # formula [binary]
   local formula="$1" binary="${2:-$1}"
   if command -v "$binary" >/dev/null 2>&1; then
     _skip "$formula already installed"; return
   fi
   if [ "$DRY_RUN" -eq 1 ]; then _dry "would brew install $formula"; return; fi
-  printf "  ${_C_SUBTEXT}○ installing %s...${_C_RESET}" "$formula"
-  if brew install "$formula" >/dev/null 2>&1; then
-    printf "\r\033[K"; _ok "installed $formula"
+  brew install "$formula" >/dev/null 2>&1 &
+  local brew_pid=$!
+  _spin "installing $formula" "$brew_pid"
+  local exit_code=0
+  wait "$brew_pid" || exit_code=$?
+  if [ "$exit_code" -eq 0 ]; then
+    _ok "installed $formula"
   else
-    printf "\r\033[K"; _err "failed to install $formula"; return 1
+    _err "failed to install $formula"; return 1
   fi
 }
 
@@ -131,35 +143,215 @@ _theme_variants() {
   esac
 }
 
-# Single-select via fzf. Prints the chosen item.
-_pick() { # "Header text" option1 option2 ...
-  local header="$1"; shift
-  printf '%s\n' "$@" | fzf \
-    --prompt "  > " \
-    --header "  ${header}" \
-    --height="~$((${#@} + 5))" \
-    --layout=reverse --border=rounded \
-    --no-info --no-sort \
-    --color="$_FZF_COLORS"
+# ── Pure-bash interactive menus ───────────────────────────────────────────────
+
+_read_key() {
+  local k1 k2
+  IFS= read -r -s -n1 k1 </dev/tty
+  if [[ "$k1" == $'\033' ]]; then
+    IFS= read -r -s -n2 -t 0.05 k2 </dev/tty || true
+    case "$k2" in
+      '[A') printf 'UP';   return ;;
+      '[B') printf 'DOWN'; return ;;
+    esac
+    printf 'ESC'; return
+  fi
+  if [[ "$k1" == $'\r' || -z "$k1" ]]; then printf 'ENTER'; return; fi
+  if [[ "$k1" == ' ' ]];                 then printf 'SPACE'; return; fi
+  printf 'OTHER'
 }
 
-# Multi-select via fzf (TAB toggles, CTRL-A all/none). All pre-selected.
-_pick_multi() { # "Header text" option1 option2 ...
-  local header="$1"; shift
-  printf '%s\n' "$@" | fzf \
-    --multi \
-    --prompt "  > " \
-    --header "  ${header}  (TAB=toggle  CTRL-A=all/none)" \
-    --bind "start:select-all,tab:toggle,ctrl-a:toggle-all" \
-    --height="~$((${#@} + 6))" \
-    --layout=reverse --border=rounded \
-    --no-info --no-sort \
-    --marker="✓ " \
-    --color="$_FZF_COLORS" \
-    || true
+# Single-select arrow-key menu. Prints chosen item to stdout; all display to stderr.
+_pick() { # "title" opt1 opt2 ...
+  local title="$1"; shift
+  local opts=("$@")
+  local n=${#opts[@]}
+  local cur=0
+  local lines=$(( n + 5 ))  # blank + title + blank + n items + blank + hint
+
+  _pick_draw() {
+    printf '\033[%dA' "$lines" >&2
+    printf '\n' >&2
+    printf '  \033[1m\033[38;2;203;166;247m✦  %s\033[0m\n' "$title" >&2
+    printf '\n' >&2
+    local j=0
+    while (( j < n )); do
+      if (( j == cur )); then
+        printf '  \033[1m\033[38;2;203;166;247m❯  %s\033[0m\n' "${opts[$j]}" >&2
+      else
+        printf '  \033[38;2;108;112;134m   %s\033[0m\n' "${opts[$j]}" >&2
+      fi
+      j=$(( j + 1 ))
+    done
+    printf '\n' >&2
+    printf '  \033[38;2;108;112;134m↑ ↓  move   ↵  select\033[0m\n' >&2
+  }
+
+  # Initial draw (no cursor-up on first paint).
+  printf '\033[?25l' >&2
+  printf '\n' >&2
+  printf '  \033[1m\033[38;2;203;166;247m✦  %s\033[0m\n' "$title" >&2
+  printf '\n' >&2
+  local i=0
+  while (( i < n )); do
+    if (( i == cur )); then
+      printf '  \033[1m\033[38;2;203;166;247m❯  %s\033[0m\n' "${opts[$i]}" >&2
+    else
+      printf '  \033[38;2;108;112;134m   %s\033[0m\n' "${opts[$i]}" >&2
+    fi
+    i=$(( i + 1 ))
+  done
+  printf '\n' >&2
+  printf '  \033[38;2;108;112;134m↑ ↓  move   ↵  select\033[0m\n' >&2
+
+  local key
+  while true; do
+    key="$(_read_key)"
+    case "$key" in
+      UP)
+        if (( cur == 0 )); then
+          cur=$(( n - 1 ))
+        else
+          cur=$(( cur - 1 ))
+        fi
+        _pick_draw
+        ;;
+      DOWN)
+        cur=$(( (cur + 1) % n ))
+        _pick_draw
+        ;;
+      ENTER)
+        printf '\033[%dA\033[J' "$lines" >&2
+        printf '  \033[38;2;108;112;134m✦  %s\033[0m   \033[1m\033[38;2;205;214;244m%s\033[0m\n' \
+          "$title" "${opts[$cur]}" >&2
+        printf '\033[?25h' >&2
+        printf '%s' "${opts[$cur]}"
+        return
+        ;;
+    esac
+  done
 }
 
-# Simple y/N prompt (reads from /dev/tty so it works after pipe re-exec).
+# Multi-select arrow-key menu. Prints chosen items to stdout (one per line); display to stderr.
+_pick_multi() { # "title" opt1 opt2 ...
+  local title="$1"; shift
+  local opts=("$@")
+  local n=${#opts[@]}
+  local cur=0
+  local sel=()
+  local i=0
+  while (( i < n )); do
+    sel+=("1")
+    i=$(( i + 1 ))
+  done
+  local lines=$(( n + 5 ))  # blank + title + blank + n items + blank + hint
+
+  _multi_draw() {
+    printf '\033[%dA' "$lines" >&2
+    printf '\n' >&2
+    printf '  \033[1m\033[38;2;203;166;247m✦  %s\033[0m\n' "$title" >&2
+    printf '\n' >&2
+    local j=0
+    while (( j < n )); do
+      local dot item_color
+      if [ "${sel[$j]}" = "1" ]; then
+        dot='\033[38;2;166;227;161m◉\033[0m'
+        item_color='\033[1m\033[38;2;205;214;244m'
+      else
+        dot='\033[38;2;108;112;134m○\033[0m'
+        item_color='\033[38;2;108;112;134m'
+      fi
+      if (( j == cur )); then
+        printf '  \033[1m\033[38;2;203;166;247m❯  \033[0m' >&2
+      else
+        printf '     ' >&2
+      fi
+      printf '%b  %b%s\033[0m\n' "$dot" "$item_color" "${opts[$j]}" >&2
+      j=$(( j + 1 ))
+    done
+    printf '\n' >&2
+    printf '  \033[38;2;108;112;134m↑ ↓  move   space  toggle   ↵  confirm\033[0m\n' >&2
+  }
+
+  # Initial draw (no cursor-up on first paint).
+  printf '\033[?25l' >&2
+  printf '\n' >&2
+  printf '  \033[1m\033[38;2;203;166;247m✦  %s\033[0m\n' "$title" >&2
+  printf '\n' >&2
+  local j=0
+  while (( j < n )); do
+    local dot item_color
+    if [ "${sel[$j]}" = "1" ]; then
+      dot='\033[38;2;166;227;161m◉\033[0m'
+      item_color='\033[1m\033[38;2;205;214;244m'
+    else
+      dot='\033[38;2;108;112;134m○\033[0m'
+      item_color='\033[38;2;108;112;134m'
+    fi
+    if (( j == cur )); then
+      printf '  \033[1m\033[38;2;203;166;247m❯  \033[0m' >&2
+    else
+      printf '     ' >&2
+    fi
+    printf '%b  %b%s\033[0m\n' "$dot" "$item_color" "${opts[$j]}" >&2
+    j=$(( j + 1 ))
+  done
+  printf '\n' >&2
+  printf '  \033[38;2;108;112;134m↑ ↓  move   space  toggle   ↵  confirm\033[0m\n' >&2
+
+  local key
+  while true; do
+    key="$(_read_key)"
+    case "$key" in
+      UP)
+        if (( cur == 0 )); then
+          cur=$(( n - 1 ))
+        else
+          cur=$(( cur - 1 ))
+        fi
+        _multi_draw
+        ;;
+      DOWN)
+        cur=$(( (cur + 1) % n ))
+        _multi_draw
+        ;;
+      SPACE)
+        if [ "${sel[$cur]}" = "1" ]; then
+          sel[$cur]="0"
+        else
+          sel[$cur]="1"
+        fi
+        _multi_draw
+        ;;
+      ENTER)
+        local chosen=()
+        local k=0
+        while (( k < n )); do
+          [ "${sel[$k]}" = "1" ] && chosen+=("${opts[$k]}") || true
+          k=$(( k + 1 ))
+        done
+        printf '\033[%dA\033[J' "$lines" >&2
+        if [ ${#chosen[@]} -eq 0 ]; then
+          printf '  \033[38;2;108;112;134m✦  %s   none\033[0m\n' "$title" >&2
+        else
+          printf '  \033[38;2;108;112;134m✦  %s\033[0m' "$title" >&2
+          local item
+          for item in "${chosen[@]}"; do
+            printf '   \033[1m\033[38;2;205;214;244m%s\033[0m' "$item" >&2
+          done
+          printf '\n' >&2
+        fi
+        printf '\033[?25h' >&2
+        for item in "${chosen[@]}"; do
+          printf '%s\n' "$item"
+        done
+        return
+        ;;
+    esac
+  done
+}
+
+# Simple y/N confirmation. Reads from /dev/tty (works after curl-pipe re-exec).
 _confirm() { # "Question?"
   local answer
   printf "  %s [Y/n] " "$1"
@@ -198,13 +390,6 @@ if ! command -v brew >/dev/null 2>&1; then
   echo "Error: Homebrew is required. Install it from https://brew.sh" >&2; exit 1
 fi
 
-if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
-  if ! command -v fzf >/dev/null 2>&1; then
-    printf "  Installing fzf...\n"
-    brew install fzf >/dev/null 2>&1
-  fi
-fi
-
 # ── Gather choices ────────────────────────────────────────────────────────────
 
 if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
@@ -215,14 +400,17 @@ if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
   EDITOR_CHOICE="${CMUXUP_EDITOR:-helix}"
   IFS=' ' read -r -a EXTRAS <<< "${CMUXUP_EXTRAS:-yazi bat fd ripgrep}"
 else
+  # Ensure cursor is always restored on exit (Ctrl-C, errors, etc.)
+  trap 'printf "\033[?25h" >&2' EXIT
+
   _banner
 
-  THEME="$(_pick "Theme:" \
+  THEME="$(_pick "Theme" \
     "Catppuccin Mocha" "TokyoNight Storm" "Gruvbox Dark Hard" "Kanagawa Wave")"
 
-  FONT_SIZE="$(_pick "Font size:" "14" "13" "15")"
+  FONT_SIZE="$(_pick "Font size" "14" "13" "15")"
 
-  AGENT="$(_pick "AI agent (main pane):" "claude" "opencode" "codex" "none")"
+  AGENT="$(_pick "AI agent  (main pane)" "claude" "opencode" "codex" "none")"
 
   if _confirm "Install lazygit? (git TUI for the right-top pane)"; then
     INSTALL_LAZYGIT=1
@@ -230,16 +418,12 @@ else
     INSTALL_LAZYGIT=0
   fi
 
-  EDITOR_CHOICE="$(_pick "Editor tab (right-top pane):" "helix" "nvim" "vim" "none")"
-
-  EXTRAS_RAW="$(_pick_multi "Optional tools:" \
-    "yazi" "bat" "fd" "ripgrep")"
+  EDITOR_CHOICE="$(_pick "Editor  (right-top pane)" "helix" "nvim" "vim" "none")"
 
   EXTRAS=()
   while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    EXTRAS+=("$line")
-  done <<< "$EXTRAS_RAW"
+    [[ -n "$line" ]] && EXTRAS+=("$line")
+  done < <(_pick_multi "Optional tools" "yazi" "bat" "fd" "ripgrep")
 
   printf "\n"
   _confirm "Ready to install?" || { printf "  Aborted.\n"; exit 0; }
