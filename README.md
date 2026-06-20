@@ -1,8 +1,8 @@
-# cmux-conjure
+# cmuxup
 
-> One command to conjure your terminal-first agentic workspace in [cmux](https://cmux.com).
+> One command to cmuxup your terminal-first agentic workspace in [cmux](https://cmux.com).
 
-`conjure` builds a full IDE-like layout in cmux using its **control socket API** — no AppleScript, no keystroke timing, reproducible every run.
+`cmuxup` builds a full IDE-like layout in cmux using its **control socket API** — no AppleScript, no keystroke timing, reproducible every run.
 
 ```
 ┌──────────────┬───────────────────────┐
@@ -21,7 +21,7 @@
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ITZSHOAIB/cmux-conjure/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ITZSHOAIB/cmuxup/main/install.sh | bash
 ```
 
 The interactive installer (powered by [gum](https://github.com/charmbracelet/gum)) will ask you to choose:
@@ -38,10 +38,10 @@ It installs and configures: `lazygit`, `delta`, `helix`, `yazi`, `starship`, `zo
 ## Usage
 
 ```bash
-conjure ~/my-project
+cmuxup ~/my-project
 ```
 
-Open a new shell after installing, then run `conjure` from anywhere.
+Open a new shell after installing, then run `cmuxup` from anywhere.
 
 ## What opens
 
@@ -57,10 +57,10 @@ Open a new shell after installing, then run `conjure` from anywhere.
 Override any pane command without reinstalling:
 
 ```bash
-CONJURE_MAIN_CMD="opencode"  conjure ~/my-project
-CONJURE_LG_CMD="tig"         conjure ~/my-project
-CONJURE_HX_CMD="nvim ."      conjure ~/my-project
-CONJURE_DEV_CMD="yarn dev"   conjure ~/my-project
+CMUXUP_MAIN_CMD="opencode"  cmuxup ~/my-project
+CMUXUP_LG_CMD="tig"         cmuxup ~/my-project
+CMUXUP_HX_CMD="nvim ."      cmuxup ~/my-project
+CMUXUP_DEV_CMD="yarn dev"   cmuxup ~/my-project
 ```
 
 ## Config templates
@@ -80,11 +80,11 @@ All configs live in `templates/` and use `{{PLACEHOLDER}}` substitution. Edit th
 ## Non-interactive install (CI / scripting)
 
 ```bash
-CONJURE_NON_INTERACTIVE=1 \
-CONJURE_THEME="Catppuccin Mocha" \
-CONJURE_FONT_SIZE=14 \
-CONJURE_AGENT=claude \
-CONJURE_EDITOR=helix \
+CMUXUP_NON_INTERACTIVE=1 \
+CMUXUP_THEME="Catppuccin Mocha" \
+CMUXUP_FONT_SIZE=14 \
+CMUXUP_AGENT=claude \
+CMUXUP_EDITOR=helix \
 bash install.sh
 ```
 

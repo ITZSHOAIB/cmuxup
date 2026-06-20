@@ -4,11 +4,11 @@
 INSTALL="$BATS_TEST_DIRNAME/../install.sh"
 
 setup() {
-  export CONJURE_NON_INTERACTIVE=1
-  export CONJURE_THEME="Catppuccin Mocha"
-  export CONJURE_FONT_SIZE="14"
-  export CONJURE_AGENT="claude"
-  export CONJURE_EDITOR="helix"
+  export CMUXUP_NON_INTERACTIVE=1
+  export CMUXUP_THEME="Catppuccin Mocha"
+  export CMUXUP_FONT_SIZE="14"
+  export CMUXUP_AGENT="claude"
+  export CMUXUP_EDITOR="helix"
   # Use an isolated HOME so we never touch the real ~/.gitconfig etc.
   export HOME="$(mktemp -d)"
   mkdir -p "$HOME/.local/bin"
@@ -43,19 +43,19 @@ teardown() {
   rm "$TMPL"
 }
 
-# ── 4. installs conjure to ~/.local/bin ───────────────────────────────────────
-@test "install.sh --dry-run reports it would install conjure to ~/.local/bin" {
+# ── 4. installs cmuxup to ~/.local/bin ───────────────────────────────────────
+@test "install.sh --dry-run reports it would install cmuxup to ~/.local/bin" {
   run bash "$INSTALL" --dry-run
   [ "$status" -eq 0 ]
   # dry-run should mention the install path
-  [[ "$output" == *"local/bin"* ]] || [[ "$output" == *"conjure"* ]]
+  [[ "$output" == *"local/bin"* ]] || [[ "$output" == *"cmuxup"* ]]
 }
 
 # ── 5. does not overwrite existing ghostty config without confirmation ─────────
 @test "install.sh skips ghostty config when it already exists and not confirmed" {
   mkdir -p "$HOME/.config/ghostty"
   echo "existing-content" > "$HOME/.config/ghostty/config"
-  # Non-interactive mode with CONJURE_OVERWRITE unset should not overwrite.
+  # Non-interactive mode with CMUXUP_OVERWRITE unset should not overwrite.
   run bash "$INSTALL" --dry-run
   [ "$status" -eq 0 ]
   # File should still have original content.

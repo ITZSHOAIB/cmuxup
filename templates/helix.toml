@@ -1,4 +1,4 @@
-# Helix editor config — managed by cmux-conjure
+# Helix editor config — managed by cmuxup
 theme = "{{HELIX_THEME}}"
 
 [editor]

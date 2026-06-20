@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
-# Tests for bin/conjure — run with: bats test/conjure.bats
+# Tests for bin/cmuxup — run with: bats test/cmuxup.bats
 
-CONJURE="$BATS_TEST_DIRNAME/../bin/conjure"
+CONJURE="$BATS_TEST_DIRNAME/../bin/cmuxup"
 
 setup() {
-  # Prepend mock cmux to PATH so conjure never touches the real cmux socket.
+  # Prepend mock cmux to PATH so cmuxup never touches the real cmux socket.
   export PATH="$BATS_TEST_DIRNAME/bin:$PATH"
   export CMUX_QUIET=1
   # Clean up mock call log before each test.
@@ -12,28 +12,28 @@ setup() {
 }
 
 # ── 1. --help ─────────────────────────────────────────────────────────────────
-@test "conjure --help exits 0 and shows Usage" {
+@test "cmuxup --help exits 0 and shows Usage" {
   run "$CONJURE" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage"* ]]
 }
 
 # ── 2. --version ──────────────────────────────────────────────────────────────
-@test "conjure --version exits 0 and prints a semver" {
+@test "cmuxup --version exits 0 and prints a semver" {
   run "$CONJURE" --version
   [ "$status" -eq 0 ]
   [[ "$output" =~ [0-9]+\.[0-9]+\.[0-9]+ ]]
 }
 
 # ── 3. bad directory ──────────────────────────────────────────────────────────
-@test "conjure /nonexistent exits 1 with error on stderr" {
-  run "$CONJURE" /this-does-not-exist-cmux-conjure
+@test "cmuxup /nonexistent exits 1 with error on stderr" {
+  run "$CONJURE" /this-does-not-exist-cmuxup
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"not a directory"* ]] || [[ "$output" == *"not a directory"* ]]
 }
 
 # ── 4. calls new-workspace with correct --cwd ─────────────────────────────────
-@test "conjure calls cmux new-workspace with --cwd set to project dir" {
+@test "cmuxup calls cmux new-workspace with --cwd set to project dir" {
   TMPDIR_PROJ="$(mktemp -d)"
   run "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
@@ -44,7 +44,7 @@ setup() {
 }
 
 # ── 5. calls new-split right ──────────────────────────────────────────────────
-@test "conjure calls cmux new-split right for the git/editor pane" {
+@test "cmuxup calls cmux new-split right for the git/editor pane" {
   TMPDIR_PROJ="$(mktemp -d)"
   run "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
@@ -53,7 +53,7 @@ setup() {
 }
 
 # ── 6. calls new-split down ───────────────────────────────────────────────────
-@test "conjure calls cmux new-split down for the dev terminal pane" {
+@test "cmuxup calls cmux new-split down for the dev terminal pane" {
   TMPDIR_PROJ="$(mktemp -d)"
   run "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
@@ -62,7 +62,7 @@ setup() {
 }
 
 # ── 7. calls new-surface --pane for the helix tab ─────────────────────────────
-@test "conjure calls cmux new-surface --type terminal --pane for helix tab" {
+@test "cmuxup calls cmux new-surface --type terminal --pane for helix tab" {
   TMPDIR_PROJ="$(mktemp -d)"
   run "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
@@ -72,7 +72,7 @@ setup() {
 }
 
 # ── 8. renames both tabs ──────────────────────────────────────────────────────
-@test "conjure renames tabs to lazygit and helix" {
+@test "cmuxup renames tabs to lazygit and helix" {
   TMPDIR_PROJ="$(mktemp -d)"
   run "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
@@ -83,7 +83,7 @@ setup() {
 }
 
 # ── 9. sends commands via send + send-key Enter ───────────────────────────────
-@test "conjure sends commands to panes via cmux send and send-key Enter" {
+@test "cmuxup sends commands to panes via cmux send and send-key Enter" {
   TMPDIR_PROJ="$(mktemp -d)"
   run "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
@@ -93,10 +93,10 @@ setup() {
   rm -rf "$TMPDIR_PROJ"
 }
 
-# ── 10. CONJURE_MAIN_CMD override ─────────────────────────────────────────────
-@test "CONJURE_MAIN_CMD env override is used instead of claude" {
+# ── 10. CMUXUP_MAIN_CMD override ─────────────────────────────────────────────
+@test "CMUXUP_MAIN_CMD env override is used instead of claude" {
   TMPDIR_PROJ="$(mktemp -d)"
-  run env CONJURE_MAIN_CMD="my-custom-agent" "$CONJURE" "$TMPDIR_PROJ"
+  run env CMUXUP_MAIN_CMD="my-custom-agent" "$CONJURE" "$TMPDIR_PROJ"
   [ "$status" -eq 0 ]
   grep -q "my-custom-agent" "${BATS_TMPDIR}/cmux_calls"
   rm -rf "$TMPDIR_PROJ"
