@@ -6,20 +6,22 @@ set -euo pipefail
 # Or:    bash install.sh [--help] [--dry-run]
 #
 # Non-interactive mode (for CI / testing):
-#   CMUXUP_NON_INTERACTIVE=1  skip all gum prompts, use env vars below
-#   CMUXUP_THEME              one of: "Catppuccin Mocha" | "TokyoNight Storm" | "Gruvbox Dark Hard" | "Kanagawa Wave"
-#   CMUXUP_FONT_SIZE          13 | 14 | 15
-#   CMUXUP_AGENT              claude | opencode | codex | none
-#   CMUXUP_EDITOR             helix | nvim | vim
-#   CMUXUP_OVERWRITE          1 = overwrite existing configs without prompting
+#   CMUXUP_NON_INTERACTIVE=1
+#   CMUXUP_THEME       "Catppuccin Mocha" | "TokyoNight Storm" | "Gruvbox Dark Hard" | "Kanagawa Wave"
+#   CMUXUP_FONT_SIZE   13 | 14 | 15
+#   CMUXUP_AGENT       claude | opencode | codex | none
+#   CMUXUP_LAZYGIT     1 | 0   (install lazygit)
+#   CMUXUP_EDITOR      helix | nvim | vim | none
+#   CMUXUP_EXTRAS      space-separated: "yazi bat fd ripgrep"
+#   CMUXUP_OVERWRITE   1 = overwrite existing configs without prompting
 
 VERSION="0.1.0"
 DRY_RUN=0
 REPO="ITZSHOAIB/cmuxup"
 BRANCH="main"
 
-# When piped via stdin (e.g. curl ... | bash), BASH_SOURCE[0] is unset and
-# template files are unavailable. Download the repo tarball and re-exec.
+# When piped via stdin (curl ... | bash), BASH_SOURCE[0] is unset and template
+# files are unavailable. Download the repo tarball and re-exec from a real file.
 _SELF="${BASH_SOURCE[0]:-}"
 if [[ -z "$_SELF" || "$_SELF" == "bash" || "$_SELF" == "-bash" ]]; then
   _TMP="$(mktemp -d)"
@@ -27,7 +29,7 @@ if [[ -z "$_SELF" || "$_SELF" == "bash" || "$_SELF" == "-bash" ]]; then
   echo "Downloading cmuxup..."
   curl -fsSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" \
     | tar -xz -C "$_TMP" --strip-components=1
-  # Restore TTY as stdin so gum interactive prompts work after pipe exhaustion.
+  # Restore /dev/tty as stdin so gum interactive prompts work after pipe exhaustion.
   exec bash "$_TMP/install.sh" "$@" </dev/tty
 fi
 
@@ -44,11 +46,13 @@ Options:
   --dry-run     Show what would be installed without making changes
 
 Non-interactive env vars (set CMUXUP_NON_INTERACTIVE=1):
-  CMUXUP_THEME       Theme name           (default: Catppuccin Mocha)
-  CMUXUP_FONT_SIZE   Font size            (default: 14)
-  CMUXUP_AGENT       AI agent command     (default: claude)
-  CMUXUP_EDITOR      Editor for hx tab    (default: helix)
-  CMUXUP_OVERWRITE   Overwrite existing configs (default: 0)
+  CMUXUP_THEME       Theme name             (default: Catppuccin Mocha)
+  CMUXUP_FONT_SIZE   Font size              (default: 14)
+  CMUXUP_AGENT       AI agent command       (default: claude)
+  CMUXUP_LAZYGIT     Install lazygit        (default: 1)
+  CMUXUP_EDITOR      Editor: helix/nvim/vim/none  (default: helix)
+  CMUXUP_EXTRAS      Space-separated extras (default: "yazi bat fd ripgrep")
+  CMUXUP_OVERWRITE   Overwrite existing configs   (default: 0)
 EOF
 }
 
@@ -68,49 +72,32 @@ _dry()  { echo "  [dry-run] $*"; }
 
 _write_file() { # dest content
   local dest="$1" content="$2"
-  if [ "$DRY_RUN" -eq 1 ]; then
-    _dry "would write $dest"
-    return
-  fi
+  if [ "$DRY_RUN" -eq 1 ]; then _dry "would write $dest"; return; fi
   mkdir -p "$(dirname "$dest")"
   if [ -f "$dest" ] && [ "${CMUXUP_OVERWRITE:-0}" != "1" ]; then
-    if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ]; then
-      _skip "$dest already exists"
-      return
-    fi
-    if command -v gum >/dev/null 2>&1; then
-      gum confirm "Overwrite $dest?" || { _skip "$dest already exists"; return; }
-    else
-      _skip "$dest already exists (use CMUXUP_OVERWRITE=1 to overwrite)"
-      return
-    fi
+    _skip "$dest already exists"; return
   fi
   printf '%s\n' "$content" > "$dest"
   _ok "wrote $dest"
 }
 
 _apply_template() { # template_file dest theme font_size delta_theme helix_theme
-  local tpl="$1" dest="$2" theme="$3" font_size="$4" delta_theme="$5" helix_theme="$6"
   local content
   content="$(sed \
-    -e "s|{{THEME}}|$theme|g" \
-    -e "s|{{FONT_SIZE}}|$font_size|g" \
-    -e "s|{{DELTA_THEME}}|$delta_theme|g" \
-    -e "s|{{HELIX_THEME}}|$helix_theme|g" \
-    "$tpl")"
-  _write_file "$dest" "$content"
+    -e "s|{{THEME}}|$3|g" \
+    -e "s|{{FONT_SIZE}}|$4|g" \
+    -e "s|{{DELTA_THEME}}|$5|g" \
+    -e "s|{{HELIX_THEME}}|$6|g" \
+    "$1")"
+  _write_file "$2" "$content"
 }
 
-_brew_install() { # formula [binary]  (binary defaults to formula name)
+_brew_install() { # formula [binary]
   local formula="$1" binary="${2:-$1}"
   if command -v "$binary" >/dev/null 2>&1; then
-    _skip "$formula already installed"
-    return
+    _skip "$formula already installed"; return
   fi
-  if [ "$DRY_RUN" -eq 1 ]; then
-    _dry "would brew install $formula"
-    return
-  fi
+  if [ "$DRY_RUN" -eq 1 ]; then _dry "would brew install $formula"; return; fi
   if command -v gum >/dev/null 2>&1; then
     gum spin --spinner dot --title "Installing $formula..." -- brew install "$formula"
   else
@@ -119,25 +106,22 @@ _brew_install() { # formula [binary]  (binary defaults to formula name)
   _ok "installed $formula"
 }
 
-# ── Map theme name to variants used by different tools ────────────────────────
-_theme_variants() { # theme_name → sets DELTA_THEME and HELIX_THEME
+_theme_variants() {
   case "$1" in
-    "Catppuccin Mocha") DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha" ;;
-    "TokyoNight Storm") DELTA_THEME="TwoDark";          HELIX_THEME="dark_plus" ;;
-    "Gruvbox Dark Hard") DELTA_THEME="gruvbox-dark";    HELIX_THEME="gruvbox_dark_hard" ;;
-    "Kanagawa Wave")    DELTA_THEME="Nord";              HELIX_THEME="catppuccin_mocha" ;;
-    *)                  DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha" ;;
+    "Catppuccin Mocha")  DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha"  ;;
+    "TokyoNight Storm")  DELTA_THEME="TwoDark";          HELIX_THEME="dark_plus"          ;;
+    "Gruvbox Dark Hard") DELTA_THEME="gruvbox-dark";     HELIX_THEME="gruvbox_dark_hard"  ;;
+    "Kanagawa Wave")     DELTA_THEME="Nord";              HELIX_THEME="catppuccin_mocha"   ;;
+    *)                   DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha"   ;;
   esac
 }
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 
 if ! command -v brew >/dev/null 2>&1; then
-  echo "Error: Homebrew is required. Install it from https://brew.sh then re-run." >&2
-  exit 1
+  echo "Error: Homebrew is required. Install it from https://brew.sh" >&2; exit 1
 fi
 
-# Bootstrap gum for the interactive UI (skip in dry-run or non-interactive).
 if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
   if ! command -v gum >/dev/null 2>&1; then
     echo "Installing gum for the interactive UI..."
@@ -151,91 +135,142 @@ if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
   THEME="${CMUXUP_THEME:-Catppuccin Mocha}"
   FONT_SIZE="${CMUXUP_FONT_SIZE:-14}"
   AGENT="${CMUXUP_AGENT:-claude}"
+  INSTALL_LAZYGIT="${CMUXUP_LAZYGIT:-1}"
   EDITOR_CHOICE="${CMUXUP_EDITOR:-helix}"
+  IFS=' ' read -r -a EXTRAS <<< "${CMUXUP_EXTRAS:-yazi bat fd ripgrep}"
 else
-  if command -v gum >/dev/null 2>&1; then
-    gum style \
-      --border double --border-foreground 212 \
-      --padding "1 4" --margin "1 0" \
-      --bold "cmuxup v${VERSION}" \
-      "Terminal-first agentic workspace for cmux"
+  gum style \
+    --border double --border-foreground 212 \
+    --padding "1 4" --margin "1 0" \
+    --bold --foreground 212 \
+    "  cmuxup v${VERSION}  " \
+    "Terminal-first agentic workspace for cmux"
 
-    THEME="$(gum choose --header "Choose your theme:" \
-      "Catppuccin Mocha" "TokyoNight Storm" "Gruvbox Dark Hard" "Kanagawa Wave")"
+  THEME="$(gum choose --header "Theme:" \
+    "Catppuccin Mocha" "TokyoNight Storm" "Gruvbox Dark Hard" "Kanagawa Wave")"
 
-    FONT_SIZE="$(gum choose --header "Font size:" "14" "13" "15")"
+  FONT_SIZE="$(gum choose --header "Font size:" "14" "13" "15")"
 
-    AGENT="$(gum choose --header "AI agent for main pane:" \
-      "claude" "opencode" "codex" "none")"
+  AGENT="$(gum choose --header "AI agent (main pane):" \
+    "claude" "opencode" "codex" "none")"
 
-    EDITOR_CHOICE="$(gum choose --header "Editor tab:" "helix" "nvim" "vim")"
-
-    gum confirm "Ready to install with these settings?" || { echo "Aborted."; exit 0; }
+  if gum confirm "Install lazygit? (git TUI for the right-top pane)"; then
+    INSTALL_LAZYGIT=1
   else
-    THEME="Catppuccin Mocha"
-    FONT_SIZE="14"
-    AGENT="claude"
-    EDITOR_CHOICE="helix"
+    INSTALL_LAZYGIT=0
   fi
+
+  EDITOR_CHOICE="$(gum choose --header "Editor tab (right-top pane):" \
+    "helix" "nvim" "vim" "none")"
+
+  echo ""
+  _log "Select optional extras (space to toggle, enter to confirm):"
+  EXTRAS_RAW="$(gum choose --no-limit \
+    --selected="yazi,bat,fd,ripgrep" \
+    --header "Optional tools:" \
+    "yazi (file manager)" \
+    "bat (better cat)" \
+    "fd (better find)" \
+    "ripgrep (better grep)" \
+    || true)"
+
+  # Extract just the tool names from "yazi (file manager)" → "yazi"
+  EXTRAS=()
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    EXTRAS+=("$(echo "$line" | awk '{print $1}')")
+  done <<< "$EXTRAS_RAW"
+
+  echo ""
+  gum confirm "Ready to install?" || { echo "Aborted."; exit 0; }
 fi
 
 _theme_variants "$THEME"
 
 # ── Ask once about overwriting existing configs ───────────────────────────────
 if [ "${CMUXUP_NON_INTERACTIVE:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ] && [ "${CMUXUP_OVERWRITE:-0}" != "1" ]; then
-  _EXISTING_CONFIGS=()
+  _EXISTING=()
   for f in "${HOME}/.config/ghostty/config" "${HOME}/.config/helix/config.toml" \
             "${HOME}/Library/Application Support/lazygit/config.yml" \
-            "${HOME}/.config/yazi/yazi.toml" "${HOME}/.config/starship.toml"; do
-    [ -f "$f" ] && _EXISTING_CONFIGS+=("$f")
+            "${HOME}/.config/yazi/yazi.toml"; do
+    [ -f "$f" ] && _EXISTING+=("$f")
   done
-  if [ "${#_EXISTING_CONFIGS[@]}" -gt 0 ]; then
+  if [ "${#_EXISTING[@]}" -gt 0 ]; then
     echo ""
-    _log "${#_EXISTING_CONFIGS[@]} config file(s) already exist."
+    _log "${#_EXISTING[@]} config file(s) already exist."
     if command -v gum >/dev/null 2>&1; then
-      gum confirm "Overwrite existing configs?" && export CMUXUP_OVERWRITE=1 || export CMUXUP_OVERWRITE=0
+      gum confirm "Overwrite existing configs?" && CMUXUP_OVERWRITE=1 || CMUXUP_OVERWRITE=0
     fi
   fi
 fi
 
-# ── Install tools ─────────────────────────────────────────────────────────────
+# ── Install core tools (always required) ─────────────────────────────────────
 
 echo ""
-_log "Installing tools..."
-_brew_install lazygit
+_log "Installing core tools..."
 _brew_install git-delta delta
-_brew_install helix hx
-_brew_install yazi
-_brew_install starship
 _brew_install zoxide
-_brew_install bat
-_brew_install fd
-_brew_install ripgrep rg
+
+# ── Install optional: lazygit ─────────────────────────────────────────────────
+
+if [ "${INSTALL_LAZYGIT}" = "1" ]; then
+  _brew_install lazygit
+fi
+
+# ── Install optional: editor ──────────────────────────────────────────────────
+
+case "$EDITOR_CHOICE" in
+  helix) _brew_install helix hx ;;
+  nvim)  _brew_install neovim nvim ;;
+  vim)   command -v vim >/dev/null 2>&1 || _brew_install vim ;;
+esac
+
+# ── Install optional extras ───────────────────────────────────────────────────
+
+for tool in "${EXTRAS[@]:-}"; do
+  case "$tool" in
+    yazi)    _brew_install yazi ;;
+    bat)     _brew_install bat ;;
+    fd)      _brew_install fd ;;
+    ripgrep) _brew_install ripgrep rg ;;
+  esac
+done
 
 # ── Write configs ─────────────────────────────────────────────────────────────
 
 echo ""
-_log "Writing configs (theme: $THEME, font: $FONT_SIZE, agent: $AGENT, editor: $EDITOR_CHOICE)..."
+_log "Writing configs..."
 
 TEMPLATES="$SCRIPT_DIR/templates"
 
-_apply_template "$TEMPLATES/ghostty.config"      "${HOME}/.config/ghostty/config"      "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/helix.toml"          "${HOME}/.config/helix/config.toml"   "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/lazygit.yml"         "${HOME}/Library/Application Support/lazygit/config.yml" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/yazi.toml"           "${HOME}/.config/yazi/yazi.toml"      "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/starship.toml"       "${HOME}/.config/starship.toml"       "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
-_apply_template "$TEMPLATES/gitconfig-delta.ini" "${TMPDIR:-/tmp}/cmuxup-gitdelta.ini" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+_apply_template "$TEMPLATES/ghostty.config" \
+  "${HOME}/.config/ghostty/config" \
+  "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 
-# Merge delta git config (non-destructive: only sets keys not already present).
+if [ "$EDITOR_CHOICE" = "helix" ]; then
+  _apply_template "$TEMPLATES/helix.toml" \
+    "${HOME}/.config/helix/config.toml" \
+    "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+fi
+
+if [ "${INSTALL_LAZYGIT}" = "1" ]; then
+  _apply_template "$TEMPLATES/lazygit.yml" \
+    "${HOME}/Library/Application Support/lazygit/config.yml" \
+    "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+fi
+
+if echo "${EXTRAS[*]:-}" | grep -qw "yazi"; then
+  _apply_template "$TEMPLATES/yazi.toml" \
+    "${HOME}/.config/yazi/yazi.toml" \
+    "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+fi
+
+# Wire delta into git.
+_apply_template "$TEMPLATES/gitconfig-delta.ini" \
+  "${TMPDIR:-/tmp}/cmuxup-gitdelta.ini" \
+  "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+
 if [ "$DRY_RUN" -eq 0 ]; then
-  while IFS= read -r line; do
-    [[ "$line" =~ ^\[.*\]$ || -z "$line" ]] && continue
-    key="$(echo "$line" | sed 's/ *= *.*//' | xargs)"
-    val="$(echo "$line" | sed 's/.*= *//' | xargs)"
-    section=""
-    # We'll use git config --global directly.
-    true
-  done < "${TMPDIR:-/tmp}/cmuxup-gitdelta.ini"
   git config --global core.pager "delta"
   git config --global interactive.diffFilter "delta --color-only"
   git config --global delta.navigate true
@@ -249,12 +284,13 @@ else
   _dry "would configure git delta"
 fi
 
-# Write cmux.json settings if not already customized.
+# cmux.json settings.
 CMUX_JSON="${HOME}/.config/cmux/cmux.json"
 if [ -f "$CMUX_JSON" ] && grep -q '"diffViewer"' "$CMUX_JSON" 2>/dev/null; then
   _skip "cmux.json already has cmuxup settings"
 else
-  _apply_template "$TEMPLATES/cmux-settings.jsonc" "$CMUX_JSON" "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
+  _apply_template "$TEMPLATES/cmux-settings.jsonc" "$CMUX_JSON" \
+    "$THEME" "$FONT_SIZE" "$DELTA_THEME" "$HELIX_THEME"
 fi
 
 # ── Install cmuxup command ────────────────────────────────────────────────────
@@ -273,26 +309,55 @@ fi
 
 # ── Shell integration ─────────────────────────────────────────────────────────
 
-ZSHRC="${HOME}/.zshrc"
-SHELL_BLOCK='
-# ── cmuxup shell integration ──────────────────────────────────────────
-export EDITOR="hx"
-export VISUAL="hx"
-eval "$(zoxide init zsh)"
-eval "$(starship init zsh)"
-function y() {
-  local tmp cwd
-  tmp="$(mktemp -t yazi-cwd.XXXXXX)"
-  yazi "$@" --cwd-file="$tmp"
-  if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
-    builtin cd -- "$cwd"
-  fi
-  rm -f -- "$tmp"
-}
-alias lg="lazygit"
-alias e="hx"
-# ── end cmuxup ─────────────────────────────────────────────────────────'
+# Resolve editor binary for EDITOR env var.
+case "$EDITOR_CHOICE" in
+  helix) _EDITOR_BIN="hx" ;;
+  nvim)  _EDITOR_BIN="nvim" ;;
+  vim)   _EDITOR_BIN="vim" ;;
+  *)     _EDITOR_BIN="" ;;
+esac
 
+# Build env overrides for cmuxup command defaults.
+# Build the shell integration block line by line to avoid set -e on empty conditionals.
+_SB=()
+_SB+=("# ── cmuxup shell integration ──────────────────────────────────────────")
+[ -n "$_EDITOR_BIN" ] && _SB+=("export EDITOR=\"$_EDITOR_BIN\"") || true
+[ -n "$_EDITOR_BIN" ] && _SB+=("export VISUAL=\"$_EDITOR_BIN\"") || true
+[ "$AGENT" != "none" ] && _SB+=("export CMUXUP_MAIN_CMD=\"$AGENT\"") || true
+[ "${INSTALL_LAZYGIT}" = "1" ] && _SB+=('export CMUXUP_LG_CMD="lazygit"') || true
+case "$EDITOR_CHOICE" in
+  helix) _SB+=('export CMUXUP_HX_CMD="hx ."') ;;
+  nvim)  _SB+=('export CMUXUP_HX_CMD="nvim ."') ;;
+  vim)   _SB+=('export CMUXUP_HX_CMD="vim ."') ;;
+  none)  _SB+=('export CMUXUP_HX_CMD=""') ;;
+esac
+_SB+=('eval "$(zoxide init zsh)"')
+
+# Add yazi shell function if installed.
+if echo "${EXTRAS[*]:-}" | grep -qw "yazi"; then
+  _SB+=('function y() {')
+  _SB+=('  local tmp cwd')
+  _SB+=('  tmp="$(mktemp -t yazi-cwd.XXXXXX)"')
+  _SB+=('  yazi "$@" --cwd-file="$tmp"')
+  _SB+=('  if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then')
+  _SB+=('    builtin cd -- "$cwd"')
+  _SB+=('  fi')
+  _SB+=('  rm -f -- "$tmp"')
+  _SB+=("}")
+fi
+
+_SB+=('alias lg="lazygit"')
+[ -n "$_EDITOR_BIN" ] && _SB+=("alias e=\"$_EDITOR_BIN\"") || true
+_SB+=("# ── end cmuxup ─────────────────────────────────────────────────────────")
+
+# Join the array with newlines.
+SHELL_BLOCK=""
+for _line in "${_SB[@]}"; do
+  SHELL_BLOCK="${SHELL_BLOCK}
+${_line}"
+done
+
+ZSHRC="${HOME}/.zshrc"
 if [ "$DRY_RUN" -eq 1 ]; then
   _dry "would append shell integration to $ZSHRC"
 elif grep -q "cmuxup shell integration" "$ZSHRC" 2>/dev/null; then
@@ -313,21 +378,18 @@ if command -v gum >/dev/null 2>&1 && [ "$DRY_RUN" -eq 0 ] && [ "${CMUXUP_NON_INT
     "  ✦ cmuxup is ready  ✦"
   gum style --foreground 245 --margin "0 2" \
     "Theme:   $THEME" \
-    "Font:    $FONT_SIZE pt  |  Editor: $EDITOR_CHOICE  |  Agent: $AGENT"
+    "Font:    ${FONT_SIZE}pt  |  Agent: $AGENT  |  Editor: $EDITOR_CHOICE  |  Lazygit: $([ "$INSTALL_LAZYGIT" = "1" ] && echo yes || echo no)"
   echo ""
   gum style --foreground 212 --bold --margin "0 2" "  Next steps:"
   gum style --foreground 255 --margin "0 2" \
-    "  1. Open a new shell (or run: source ~/.zshrc)" \
-    "  2. Launch your workspace:  cmuxup ~/your-project" \
-    "  3. Reload cmux config:     cmux reload-config"
+    "  1. Open a new shell (or: source ~/.zshrc)" \
+    "  2. Launch a workspace:  cmuxup ~/your-project" \
+    "  3. Reload cmux config:  cmux reload-config"
   echo ""
   gum style --foreground 240 --margin "0 2" \
-    "  Docs → https://github.com/ITZSHOAIB/cmuxup"
+    "  https://github.com/ITZSHOAIB/cmuxup"
 else
   echo "✦ cmuxup is ready ✦"
-  echo ""
-  echo "  Theme: $THEME | Font: ${FONT_SIZE}pt | Editor: $EDITOR_CHOICE | Agent: $AGENT"
-  echo ""
+  echo "  Theme: $THEME | Font: ${FONT_SIZE}pt | Agent: $AGENT | Editor: $EDITOR_CHOICE"
   echo "  Next: source ~/.zshrc && cmuxup ~/your-project"
-  echo "  Docs: https://github.com/ITZSHOAIB/cmuxup"
 fi
