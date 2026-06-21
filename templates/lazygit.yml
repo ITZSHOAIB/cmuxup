@@ -1,19 +1,63 @@
 # lazygit config — managed by cmuxup
-git:
-  paging:
-    colorArg: always
-    pager: delta --dark --paging=never
 gui:
   nerdFontsVersion: "3"
-  showFileTree: true
+  border: rounded                          # softer, modern panel borders
+  showFileTree: true                       # tree layout (toggle with `)
   showRandomTip: false
-  showBottomLine: true
+  showCommandLog: false                    # drop the bottom command-log clutter
+  showBottomLine: true                     # keep keybinding hints (discoverability)
+  showPanelJumps: true                     # show 1-5 panel jump hints
   scrollHeight: 2
-  sidePanelWidth: 0.3333
+  sidePanelWidth: 0.28                      # narrower sidebar -> more room for the diff
   mainPanelSplitMode: flexible
+  enlargedSideViewLocation: top
+  showDivergenceFromBaseBranch: arrowAndNumber
+  filterMode: fuzzy
+  theme:
+    activeBorderColor:
+      - "{{LG_ACCENT}}"
+      - bold
+    inactiveBorderColor:
+      - "{{LG_SELECTION_BG}}"
+    searchingActiveBorderColor:
+      - "{{LG_ACCENT}}"
+      - bold
+    optionsTextColor:
+      - "{{LG_ACCENT}}"
+    selectedLineBgColor:
+      - "{{LG_SELECTION_BG}}"
+    cherryPickedCommitBgColor:
+      - "{{LG_SELECTION_BG}}"
+    cherryPickedCommitFgColor:
+      - "{{LG_ACCENT}}"
+    markedBaseCommitBgColor:
+      - "{{LG_SELECTION_BG}}"
+    markedBaseCommitFgColor:
+      - "{{LG_ACCENT}}"
+    unstagedChangesColor:
+      - "{{LG_UNSTAGED}}"
+    defaultFgColor:
+      - default
+  authorColors:
+    "*": "{{LG_AUTHOR}}"
+
+git:
+  pagers:
+    - colorArg: always
+      # Inherits ~/.gitconfig [delta] (theme, side-by-side, line-numbers).
+      # Zoom the pane for full-width side-by-side review (cmux: cmd+shift+enter).
+      pager: delta --dark --paging=never
+  autoRefresh: true                         # live update as files change (agent edits)
+  parseEmoji: true
+
 os:
   edit: 'hx -- {{filename}}'
   editAtLine: 'hx -- {{filename}}:{{line}}'
   editAtLineAndWait: 'hx -- {{filename}}:{{line}}'
   openDirInEditor: 'hx -- {{dir}}'
   editInTerminal: true
+
+keybinding:
+  universal:
+    edit: 'e'                               # open file in editor at the diff
+    openFile: 'o'

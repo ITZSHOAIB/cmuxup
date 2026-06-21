@@ -55,6 +55,8 @@ Existing config files are backed up to `<file>.bak` before anything is overwritt
 | [`ripgrep`](https://github.com/BurntSushi/ripgrep) | Fast search — powers the editor's project-wide search |
 | [`fd`](https://github.com/sharkdp/fd) | Fast file finding — powers the editor's file picker |
 | [`zoxide`](https://github.com/ajeetdsouza/zoxide) | Smart `cd` — jump to directories by name |
+| [`fzf`](https://github.com/junegunn/fzf) | Fuzzy finder — history (`ctrl-r`), files (`ctrl-t`), `cd` (`alt-c`) |
+| [`bat`](https://github.com/sharkdp/bat) | Syntax-highlighted file preview — powers fzf previews |
 
 **Optional** (your choice during install):
 

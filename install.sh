@@ -97,6 +97,10 @@ _apply_template() { # template_file dest theme font_size delta_theme helix_theme
     -e "s|{{FONT_SIZE}}|$4|g" \
     -e "s|{{DELTA_THEME}}|$5|g" \
     -e "s|{{HELIX_THEME}}|$6|g" \
+    -e "s|{{LG_ACCENT}}|${LG_ACCENT}|g" \
+    -e "s|{{LG_SELECTION_BG}}|${LG_SELECTION_BG}|g" \
+    -e "s|{{LG_UNSTAGED}}|${LG_UNSTAGED}|g" \
+    -e "s|{{LG_AUTHOR}}|${LG_AUTHOR}|g" \
     "$1")"
   _write_file "$2" "$content"
 }
@@ -132,12 +136,27 @@ _brew_install() { # formula [binary]
 }
 
 _theme_variants() {
+  # DELTA_THEME / HELIX_THEME — syntax themes for delta and helix.
+  # BAT_THEME              — bat syntax theme (matches delta where possible).
+  # LG_ACCENT / LG_SELECTION_BG / LG_UNSTAGED / LG_AUTHOR — lazygit theme palette
+  #                         (accent for borders/options, subtle bg for selection,
+  #                          red-ish for unstaged, author tint).
   case "$1" in
-    "Catppuccin Mocha")  DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha"  ;;
-    "TokyoNight Storm")  DELTA_THEME="TwoDark";          HELIX_THEME="dark_plus"          ;;
-    "Gruvbox Dark Hard") DELTA_THEME="gruvbox-dark";     HELIX_THEME="gruvbox_dark_hard"  ;;
-    "Kanagawa Wave")     DELTA_THEME="Nord";              HELIX_THEME="catppuccin_mocha"   ;;
-    *)                   DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha"   ;;
+    "Catppuccin Mocha")
+      DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha"; BAT_THEME="Catppuccin Mocha"
+      LG_ACCENT="#89b4fa"; LG_SELECTION_BG="#313244"; LG_UNSTAGED="#f38ba8"; LG_AUTHOR="#b4befe" ;;
+    "TokyoNight Storm")
+      DELTA_THEME="TwoDark"; HELIX_THEME="dark_plus"; BAT_THEME="TwoDark"
+      LG_ACCENT="#7aa2f7"; LG_SELECTION_BG="#2f334d"; LG_UNSTAGED="#f7768e"; LG_AUTHOR="#bb9af7" ;;
+    "Gruvbox Dark Hard")
+      DELTA_THEME="gruvbox-dark"; HELIX_THEME="gruvbox_dark_hard"; BAT_THEME="gruvbox-dark"
+      LG_ACCENT="#83a598"; LG_SELECTION_BG="#3c3836"; LG_UNSTAGED="#fb4934"; LG_AUTHOR="#fe8019" ;;
+    "Kanagawa Wave")
+      DELTA_THEME="Nord"; HELIX_THEME="catppuccin_mocha"; BAT_THEME="Nord"
+      LG_ACCENT="#7e9cd8"; LG_SELECTION_BG="#223249"; LG_UNSTAGED="#ff5d62"; LG_AUTHOR="#957fb8" ;;
+    *)
+      DELTA_THEME="Catppuccin Mocha"; HELIX_THEME="catppuccin_mocha"; BAT_THEME="Catppuccin Mocha"
+      LG_ACCENT="#89b4fa"; LG_SELECTION_BG="#313244"; LG_UNSTAGED="#f38ba8"; LG_AUTHOR="#b4befe" ;;
   esac
 }
 
@@ -329,10 +348,14 @@ _log "Installing tools..."
 #   ripgrep — fast search, powers the editor's project-wide search
 #   fd      — fast file finding, powers the editor's file picker
 #   zoxide  — smart directory jumping
+#   fzf     — fuzzy finder: history (ctrl-r), files (ctrl-t), cd (alt-c)
+#   bat     — syntax-highlighted file preview (powers fzf previews)
 _brew_install git-delta delta
 _brew_install ripgrep rg
 _brew_install fd
 _brew_install zoxide
+_brew_install fzf
+_brew_install bat
 
 [ "${INSTALL_LAZYGIT}" = "1" ] && _brew_install lazygit || true
 
@@ -420,6 +443,16 @@ case "$EDITOR_CHOICE" in
   none)  _SB+=('export CMUXUP_HX_CMD=""') ;;
 esac
 _SB+=('eval "$(zoxide init zsh)"')
+
+# fzf + bat terminal toolkit — fuzzy find with syntax-highlighted previews.
+_SB+=('source <(fzf --zsh)')                       # ctrl-r history, ctrl-t files, alt-c cd
+_SB+=("export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'")
+_SB+=('export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"')
+_SB+=("export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'")
+_SB+=("export FZF_DEFAULT_OPTS=\"--height 45% --layout=reverse --border --info=inline\"")
+_SB+=("export FZF_CTRL_T_OPTS=\"--preview 'bat --color=always --line-range=:300 {}'\"")
+_SB+=("export FZF_ALT_C_OPTS=\"--preview 'ls -la {}'\"")
+_SB+=("export BAT_THEME=\"$BAT_THEME\"")
 
 [ "${INSTALL_LAZYGIT}" = "1" ] && _SB+=('alias lg="lazygit"') || true
 [ -n "$_EDITOR_BIN" ] && _SB+=("alias e=\"$_EDITOR_BIN\"") || true
