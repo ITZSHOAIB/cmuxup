@@ -23,9 +23,10 @@ Agentic coding in the terminal usually means juggling windows: the agent here, g
 
 ## Prerequisites
 
-- macOS
+- macOS (14+)
 - [Homebrew](https://brew.sh)
-- [cmux.app](https://cmux.com) installed in `/Applications`
+
+The installer offers to install [cmux.app](https://cmux.com) itself (via `brew install --cask cmux`), so this is a true one-command, end-to-end setup. Already have cmux? It's detected and skipped.
 
 ## Install
 
@@ -40,6 +41,7 @@ The installer is pure bash — no extra dependencies, no TUI framework. It walks
 | Theme | **Catppuccin Mocha** · TokyoNight Storm · Gruvbox Dark Hard · Kanagawa Wave |
 | Font size | 13 · **14** · 15 |
 | AI agent | **claude** · opencode · codex · none |
+| cmux | install the cmux terminal app? (**yes**/no) |
 | Lazygit | install the git TUI? (**yes**/no) |
 | Editor | **helix** · nvim · vim · none |
 
