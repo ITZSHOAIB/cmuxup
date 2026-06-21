@@ -10,6 +10,7 @@ set -euo pipefail
 #   CMUXUP_THEME       "Catppuccin Mocha" | "TokyoNight Storm" | "Gruvbox Dark Hard" | "Kanagawa Wave"
 #   CMUXUP_FONT_SIZE   13 | 14 | 15
 #   CMUXUP_AGENT       claude | opencode | codex | none
+#   CMUXUP_CMUX        1 | 0   (install the cmux terminal app itself)
 #   CMUXUP_LAZYGIT     1 | 0
 #   CMUXUP_EDITOR      helix | nvim | vim | none
 #   CMUXUP_OVERWRITE   1 = overwrite existing configs without prompting
@@ -56,6 +57,7 @@ Non-interactive env vars (set CMUXUP_NON_INTERACTIVE=1):
   CMUXUP_THEME       Theme name                     (default: Catppuccin Mocha)
   CMUXUP_FONT_SIZE   Font size                      (default: 14)
   CMUXUP_AGENT       AI agent command               (default: claude)
+  CMUXUP_CMUX        Install cmux terminal  1|0     (default: 1)
   CMUXUP_LAZYGIT     Install lazygit  1|0           (default: 1)
   CMUXUP_EDITOR      helix | nvim | vim | none      (default: helix)
   CMUXUP_OVERWRITE   Overwrite existing configs 1|0 (default: 0)
@@ -132,6 +134,25 @@ _brew_install() { # formula [binary]
     _ok "installed $formula"
   else
     _err "failed to install $formula"; return 1
+  fi
+}
+
+_brew_install_cask() { # cask app_path
+  # Casks aren't on PATH, so detect by the installed .app bundle, not command -v.
+  local cask="$1" app_path="$2"
+  if [ -d "$app_path" ] || command -v "$cask" >/dev/null 2>&1; then
+    _skip "$cask already installed"; return
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then _dry "would brew install --cask $cask"; return; fi
+  brew install --cask "$cask" >/dev/null 2>&1 &
+  local pid=$!
+  _spin "installing $cask" "$pid"
+  local exit_code=0
+  wait "$pid" || exit_code=$?
+  if [ "$exit_code" -eq 0 ]; then
+    _ok "installed $cask"
+  else
+    _err "failed to install $cask"; return 1
   fi
 }
 
@@ -294,6 +315,7 @@ if [ "${CMUXUP_NON_INTERACTIVE:-0}" = "1" ] || [ "$DRY_RUN" -eq 1 ]; then
   THEME="${CMUXUP_THEME:-Catppuccin Mocha}"
   FONT_SIZE="${CMUXUP_FONT_SIZE:-14}"
   AGENT="${CMUXUP_AGENT:-claude}"
+  INSTALL_CMUX="${CMUXUP_CMUX:-1}"
   INSTALL_LAZYGIT="${CMUXUP_LAZYGIT:-1}"
   EDITOR_CHOICE="${CMUXUP_EDITOR:-helix}"
 else
@@ -308,6 +330,12 @@ else
   FONT_SIZE="$(_pick "Font size" "14" "13" "15")"
 
   AGENT="$(_pick "AI agent  (main pane)" "claude" "opencode" "codex" "none")"
+
+  if _confirm "Install cmux terminal? (the app the whole setup runs in)"; then
+    INSTALL_CMUX=1
+  else
+    INSTALL_CMUX=0
+  fi
 
   if _confirm "Install lazygit? (git TUI for the right-top pane)"; then
     INSTALL_LAZYGIT=1
@@ -342,6 +370,10 @@ fi
 
 printf "\n"
 _log "Installing tools..."
+
+# cmux itself — the terminal app the whole workspace runs in. Installed first
+# so the rest of the setup (and the cmux.json config below) has somewhere to land.
+[ "${INSTALL_CMUX}" = "1" ] && _brew_install_cask cmux "/Applications/cmux.app" || true
 
 # Core tools — the foundation every cmuxup workspace relies on:
 #   delta   — syntax-highlighted git diffs (terminal + lazygit)

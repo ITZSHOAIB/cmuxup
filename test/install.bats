@@ -8,6 +8,10 @@ setup() {
   export CMUXUP_THEME="Catppuccin Mocha"
   export CMUXUP_FONT_SIZE="14"
   export CMUXUP_AGENT="claude"
+  # Default off in tests: cmux is a ~100MB GUI cask — we don't want the
+  # real-install tests (8-10) pulling it on a fresh CI runner. The opt-in
+  # path is covered by dedicated dry-run tests below.
+  export CMUXUP_CMUX="0"
   export CMUXUP_LAZYGIT="1"
   export CMUXUP_EDITOR="helix"
   export CMUXUP_OVERWRITE="0"
@@ -118,4 +122,22 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"yazi"* ]]
   [ ! -f "$BATS_TEST_DIRNAME/../templates/yazi.toml" ]
+}
+
+# ── 13. cmux cask is installed when CMUXUP_CMUX=1 ─────────────────────────────
+@test "install.sh handles the cmux cask when CMUXUP_CMUX=1" {
+  export CMUXUP_CMUX="1"
+  run bash "$INSTALL" --dry-run
+  [ "$status" -eq 0 ]
+  # Either it's already present (skip) or the dry-run reports the cask install.
+  [[ "$output" == *"--cask cmux"* ]] || [[ "$output" == *"cmux already installed"* ]]
+}
+
+# ── 14. cmux cask is skipped entirely when CMUXUP_CMUX=0 ──────────────────────
+@test "install.sh does not touch the cmux cask when CMUXUP_CMUX=0" {
+  export CMUXUP_CMUX="0"
+  run bash "$INSTALL" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"--cask cmux"* ]]
+  [[ "$output" != *"cmux already installed"* ]]
 }
